@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -e
 
-REPO="your-username/skills"
+REPO="hkarpinen/agent-skills"
 BRANCH="main"
 BASE_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
 SKILLS_DIR=".skills"

@@ -19,11 +19,11 @@ Install skills into a project using the install script:
 
 ```bash
 # Install individual skills
-curl -fsSL https://raw.githubusercontent.com/your-username/skills/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/hkarpinen/agent-skills/main/install.sh \
   | sh -s -- righting-software dotnet-webapi dotnet-testing
 
 # Install a preset pipeline
-curl -fsSL https://raw.githubusercontent.com/your-username/skills/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/hkarpinen/agent-skills/main/install.sh \
   | sh -s -- --preset dotnet-postgres-api
 ```
 
