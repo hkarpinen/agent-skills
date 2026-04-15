@@ -1,0 +1,31 @@
+name: Release Skills
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build .skill artifacts
+        run: |
+          mkdir -p dist
+
+          zip dist/righting-software.skill  architecture/righting-software.md
+          zip dist/dotnet-webapi.skill      backend/dotnet-webapi.md
+          zip dist/dotnet-testing.skill     backend/dotnet-testing.md
+          zip dist/db-postgres.skill        database/db-postgres.md
+          zip dist/dotnet-efcore-postgres.skill bridge/dotnet-efcore-postgres.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.skill
+          generate_release_notes: true
