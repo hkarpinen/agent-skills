@@ -1,13 +1,13 @@
 # Skills
 
 A versioned library of AI agent skills for building maintainable software systems.
-Skills are plain markdown files — agnostic of any specific AI tool.
+Compliant with the [Agent Skills specification](https://agentskills.io/specification).
 
 ---
 
 ## What is a skill?
 
-A skill is a self-contained markdown file that gives an AI agent focused, opinionated
+A skill is a self-contained guide that gives an AI agent focused, opinionated
 guidance for a specific concern. Skills compose — a typical project loads 3-5 skills
 that each own a distinct concern and never duplicate each other.
 
@@ -15,89 +15,96 @@ that each own a distinct concern and never duplicate each other.
 
 ## Installation
 
-Install skills into a project using the install script:
+Install skills using the standard Agent Skills CLI:
 
 ```bash
 # Install individual skills
-curl -fsSL https://raw.githubusercontent.com/hkarpinen/agent-skills/main/install.sh \
-  | sh -s -- righting-software dotnet-webapi dotnet-testing
+npx skills add https://github.com/hkarpinen/agent-skills/tree/main/righting-software
+npx skills add https://github.com/hkarpinen/agent-skills/tree/main/dotnet-webapi
+npx skills add https://github.com/hkarpinen/agent-skills/tree/main/dotnet-testing
 
-# Install a preset pipeline
-curl -fsSL https://raw.githubusercontent.com/hkarpinen/agent-skills/main/install.sh \
-  | sh -s -- --preset dotnet-postgres-api
+# Or install multiple at once
+npx skills add \
+  https://github.com/hkarpinen/agent-skills/tree/main/righting-software \
+  https://github.com/hkarpinen/agent-skills/tree/main/dotnet-webapi \
+  https://github.com/hkarpinen/agent-skills/tree/main/ddd-tactical-patterns \
+  https://github.com/hkarpinen/agent-skills/tree/main/ddd-idesign-bridge
 ```
 
-This creates a `.skills/` directory in your project and generates agent adapter files:
+This creates a `.skills/` directory in your project:
 
 ```
 your-project/
 ├── .skills/
-│   ├── index.md                  ← local registry of installed skills + versions
-│   ├── architecture/
-│   │   └── righting-software.md
-│   └── backend/
-│       ├── dotnet-webapi.md
-│       └── dotnet-testing.md
-├── CLAUDE.md                     ← Claude Code adapter
-├── .github/
-│   └── copilot-instructions.md   ← GitHub Copilot adapter
-├── .cursor/
-│   └── rules/
-│       └── skills.md             ← Cursor adapter
-└── .windsurfrules                ← Windsurf adapter
+│   ├── righting-software/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   ├── dotnet-webapi/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   └── dotnet-testing/
+│       ├── SKILL.md
+│       └── references/
 ```
 
 ---
 
-## Versioning
+## Available Skills
 
-Skills are versioned via GitHub releases. The install script pins each skill to the
-release tag at install time. Your local `.skills/index.md` tracks installed versions.
+### Architecture & Design
+- **righting-software** — Juval Löwy's IDesign Method (volatility-based decomposition, layer discipline)
+- **ddd-tactical-patterns** — Domain-Driven Design patterns (Entities, Aggregates, Value Objects, Domain Events)
+- **ddd-idesign-bridge** — Bridge between DDD and IDesign Method
 
-```bash
-# Upgrade a skill to latest
-./skills-upgrade.sh dotnet-webapi
+### Testing
+- **testing** — Testing strategy and coverage requirements (layer-specific approaches, test types, organization)
 
-# Upgrade all skills
-./skills-upgrade.sh --all
-```
+### Backend
+- **dotnet-webapi** — .NET Web API conventions (ASP.NET Core Controllers, DI patterns)
+- **dotnet-testing** — Bridge between testing strategy and .NET (xUnit, Moq, FluentAssertions, Testcontainers)
+
+### Database
+- **db-postgres** — PostgreSQL conventions (schema design, naming, types, indexing)
+
+### Bridge
+- **dotnet-efcore-postgres** — Bridge between .NET and PostgreSQL (EF Core configuration, type mappings)
+- **dotnet-webapi-docker** — Bridge between .NET Web API and Docker (containerization patterns)
+
+### Infrastructure
+- **docker** — Docker and Docker Compose patterns (multi-stage builds, layer caching, security)
 
 ---
 
-## Skill Pipelines
+## Skill Composition
 
-Skills are designed to compose. Common pipelines:
+Skills are designed to compose. Common combinations:
 
 | Goal | Skills |
 |---|---|
-| Design any system | `righting-software` |
-| .NET Web API + PostgreSQL | `righting-software` + `dotnet-webapi` + `db-postgres` + `dotnet-efcore-postgres` |
-| Add tests | `dotnet-testing` |
-| Full greenfield .NET project | all of the above |
-| Refactor existing codebase | `righting-software` + relevant stack skills |
-| Containerize a .NET Web API | `dotnet-webapi` + `docker` + `dotnet-webapi-docker` |
-| Containerize a .NET Web API with PostgreSQL | `dotnet-webapi` + `docker` + `db-postgres` + `dotnet-efcore-postgres` + `dotnet-webapi-docker` |
+| Volatility-based architecture | `righting-software` |
+| Domain modeling with DDD | `ddd-tactical-patterns` |
+| DDD + IDesign architecture | `righting-software` + `ddd-tactical-patterns` + `ddd-idesign-bridge` |
+| Testing strategy (any platform) | `testing` |
+| .NET Web API + PostgreSQL | `dotnet-webapi` + `db-postgres` + `dotnet-efcore-postgres` |
+| .NET testing | `testing` + `dotnet-testing` |
+| Full .NET DDD project | `righting-software` + `ddd-tactical-patterns` + `ddd-idesign-bridge` + `dotnet-webapi` + `db-postgres` + `dotnet-efcore-postgres` + `testing` + `dotnet-testing` |
+| Containerize .NET API | `dotnet-webapi` + `docker` + `dotnet-webapi-docker` |
 
 ---
 
 ## For AI Agents
 
-Read `.skills/index.md` to discover available skills. Load relevant skill files
-on demand based on the task. Do not load all skills upfront.
+Skills follow the [Agent Skills specification](https://agentskills.io/specification). Each skill has:
+- `SKILL.md` — Main skill content (concise, <500 lines)
+- `references/*.md` — Detailed examples and patterns (loaded on demand)
 
----
-
-## Releases
-
-Each GitHub release publishes `.skill` files as artifacts for direct download into
-Claude.ai via Settings → Skills. The markdown source files are always the source
-of truth — `.skill` files are build artifacts.
+Load skills progressively: start with `SKILL.md`, load reference files only when needed for specific details.
 
 ---
 
 ## Contributing
 
-Each skill is a single markdown file. To add or update a skill:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on adding or updating skills.
 
 1. Create or edit the `.md` file in the appropriate directory.
 2. Update `index.md` with the skill entry.

@@ -1,16 +1,6 @@
-# docker
-
-> Language-agnostic conventions for authoring Dockerfiles and Docker Compose files.
-
-**When to use this skill**: writing or reviewing Dockerfiles, structuring multi-stage builds,
-selecting base images, hardening containers, or setting up Docker Compose for local development.
-Stack agnostic — applies to any language or framework.
-
-**Scope**: this skill covers authoring Dockerfiles and Compose files. It does not cover deploying
-or pushing images to registries, CI/CD pipeline integration, or container orchestration
-(Kubernetes, Swarm). A stack-specific bridge skill (e.g. `dotnet-webapi-docker`) owns the
-language-specific implementation of these conventions.
-
+---
+name: docker
+description: Language-agnostic conventions for authoring Dockerfiles and Docker Compose files. Use when writing or reviewing Dockerfiles, structuring multi-stage builds, selecting base images, hardening containers, or setting up Docker Compose for local development. Stack agnostic — applies to any language or framework. A stack-specific bridge skill (e.g. dotnet-webapi-docker) owns the language-specific implementation of these conventions.
 ---
 
 ## Multi-stage Builds

@@ -1,19 +1,6 @@
-# dotnet-webapi-docker
-
-> Connects a .NET Web API project to Docker, implementing general Docker conventions for the .NET SDK and ASP.NET Core runtime.
-
-**When to use this skill**: writing a Dockerfile for a .NET Web API project, structuring the
-multi-stage .NET build pipeline, configuring Docker Compose for a .NET API, or applying
-.NET-specific container conventions. Use alongside `dotnet-webapi` and `docker` — this skill
-bridges the two.
-
-**Composes with**:
-- `docker` — general Docker conventions (multi-stage builds, base image selection, layer caching,
-  security hardening, Compose patterns) this skill implements for .NET
-- `dotnet-webapi` — the .NET project structure and layer model this skill containerizes
-- `db-postgres` + `dotnet-efcore-postgres` — when PostgreSQL is in the stack; Compose wiring
-  for the database service follows `docker`'s healthcheck and dependency conventions
-
+---
+name: dotnet-webapi-docker
+description: Connects a .NET Web API project to Docker, implementing general Docker conventions for the .NET SDK and ASP.NET Core runtime. Use when writing a Dockerfile for a .NET Web API project, structuring the multi-stage .NET build pipeline, configuring Docker Compose for a .NET API, or applying .NET-specific container conventions. Use alongside dotnet-webapi and docker — this skill bridges the two.
 ---
 
 ## Base Images

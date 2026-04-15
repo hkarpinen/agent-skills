@@ -1,13 +1,6 @@
-# skill-name
-
-> One sentence describing what this skill does.
-
-**When to use this skill**: describe the specific tasks, terms, or contexts that should
-trigger loading this skill. Be specific — include what it covers and what it does NOT cover.
-
-**Composes with**: list skills this one is designed to be used alongside, and what each owns.
-Omit this section if the skill stands alone.
-
+---
+name: skill-name
+description: One or two sentences describing what this skill does and when to use it. Include specific keywords, tasks, terms, or contexts that should trigger loading this skill. Be specific — include what it covers and optionally what it does NOT cover. Maximum 1024 characters.
 ---
 
 ## Section One
@@ -31,4 +24,7 @@ Rules are imperative: "Use X" not "X can be used" or "consider using X".
 Add or remove sections as needed. There is no required number of sections.
 Every section should answer a specific question a practitioner would have.
 Avoid generic introductory sections — start with the first real rule.
+
+Note: If this skill composes with other skills, mention them in the description field
+in the YAML frontmatter above.
 -->
