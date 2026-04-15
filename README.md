@@ -75,6 +75,8 @@ Skills are designed to compose. Common pipelines:
 | Add tests | `dotnet-testing` |
 | Full greenfield .NET project | all of the above |
 | Refactor existing codebase | `righting-software` + relevant stack skills |
+| Containerize a .NET Web API | `dotnet-webapi` + `docker` + `dotnet-webapi-docker` |
+| Containerize a .NET Web API with PostgreSQL | `dotnet-webapi` + `docker` + `db-postgres` + `dotnet-efcore-postgres` + `dotnet-webapi-docker` |
 
 ---
 

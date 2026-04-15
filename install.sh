@@ -14,11 +14,13 @@ PRESET_DOTNET_POSTGRES_API="righting-software dotnet-webapi db-postgres dotnet-e
 # Skill file locations
 skill_path() {
   case "$1" in
-    righting-software)     echo "architecture/righting-software.md" ;;
-    dotnet-webapi)         echo "backend/dotnet-webapi.md" ;;
-    dotnet-testing)        echo "backend/dotnet-testing.md" ;;
-    db-postgres)           echo "database/db-postgres.md" ;;
-    dotnet-efcore-postgres)echo "bridge/dotnet-efcore-postgres.md" ;;
+    righting-software)      echo "architecture/righting-software.md" ;;
+    dotnet-webapi)          echo "backend/dotnet-webapi.md" ;;
+    dotnet-testing)         echo "backend/dotnet-testing.md" ;;
+    db-postgres)            echo "database/db-postgres.md" ;;
+    dotnet-efcore-postgres) echo "bridge/dotnet-efcore-postgres.md" ;;
+    docker)                 echo "infrastructure/docker.md" ;;
+    dotnet-webapi-docker)   echo "bridge/dotnet-webapi-docker.md" ;;
     *) echo "" ;;
   esac
 }
@@ -31,6 +33,7 @@ usage() {
   echo ""
   echo "Skills:"
   echo "  righting-software, dotnet-webapi, dotnet-testing, db-postgres, dotnet-efcore-postgres"
+  echo "  docker, dotnet-webapi-docker"
   exit 1
 }
 
@@ -113,6 +116,8 @@ EOF
       dotnet-testing)         DESC="Writing tests in .NET — xUnit, Moq, FluentAssertions, Testcontainers, coverage rules." ;;
       db-postgres)            DESC="PostgreSQL schema design — naming, types, indexes, constraints. Stack agnostic." ;;
       dotnet-efcore-postgres) DESC="Connecting .NET Infrastructure to PostgreSQL via EF Core + Npgsql." ;;
+      docker)                 DESC="Dockerfiles, multi-stage builds, base image selection, security hardening, Docker Compose. Stack agnostic." ;;
+      dotnet-webapi-docker)   DESC="Containerizing a .NET Web API — Dockerfile pipeline, NuGet layer caching, ASP.NET Core env vars, Compose wiring." ;;
     esac
     echo "| \`${SKILL}\` | \`${PATH_IN_REPO}\` | ${DESC} |" >> "${SKILLS_DIR}/index.md"
   done

@@ -36,11 +36,18 @@ Do not load all skills upfront — load only what the task requires.
 |---|---|---|
 | `db-postgres` | `database/db-postgres.md` | Designing a PostgreSQL database schema. Naming conventions, data types, indexing, constraints, normalization. Stack agnostic. |
 
+### Infrastructure
+
+| Skill | File | When to use |
+|---|---|---|
+| `docker` | `infrastructure/docker.md` | Writing or reviewing Dockerfiles, structuring multi-stage builds, selecting base images, hardening containers, or setting up Docker Compose for local development. Stack agnostic. Does not cover image deployment, CI/CD pipelines, or Kubernetes. |
+
 ### Bridge
 
 | Skill | File | When to use |
 |---|---|---|
 | `dotnet-efcore-postgres` | `bridge/dotnet-efcore-postgres.md` | Connecting a .NET Infrastructure layer to PostgreSQL — Npgsql provider config, snake_case mapping, entity configuration, PostgreSQL type mappings, migrations, Testcontainers integration tests. |
+| `dotnet-webapi-docker` | `bridge/dotnet-webapi-docker.md` | Containerizing a .NET Web API — multi-stage Dockerfile, NuGet layer caching, base image selection, ASP.NET Core environment variables, and Docker Compose wiring for a .NET API with PostgreSQL. Use alongside `dotnet-webapi` and `docker`. |
 
 ---
 
@@ -58,3 +65,5 @@ skills are independent and can be loaded in parallel.
 | Review an existing codebase | `righting-software` |
 | Full greenfield .NET project | `righting-software` → `dotnet-webapi` + `db-postgres` → `dotnet-efcore-postgres` → `dotnet-testing` |
 | Refactor existing .NET project | `righting-software` → `dotnet-webapi` |
+| Containerize a .NET Web API | `dotnet-webapi` + `docker` → `dotnet-webapi-docker` |
+| Containerize a .NET Web API with PostgreSQL | `dotnet-webapi` + `docker` + `db-postgres` → `dotnet-efcore-postgres` + `dotnet-webapi-docker` |
