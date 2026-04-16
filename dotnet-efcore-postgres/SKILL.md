@@ -1,18 +1,18 @@
 ---
 name: dotnet-efcore-postgres
-description: Connects a .NET Infrastructure layer to PostgreSQL using EF Core and Npgsql. Use when configuring EF Core with a PostgreSQL provider, setting up Npgsql, mapping domain models to PostgreSQL conventions, running migrations against PostgreSQL, or writing PostgreSQL-specific integration tests. Use alongside dotnet-webapi and db-postgres — this skill bridges the two.
+description: Connects a .NET data-access layer to PostgreSQL using EF Core and Npgsql. Use when configuring EF Core with a PostgreSQL provider, setting up Npgsql, mapping models to PostgreSQL conventions, running migrations against PostgreSQL, or writing PostgreSQL-specific integration tests. Does NOT prescribe project names or solution layout — those are owned by the architecture bridge.
 ---
 
 ## Packages
 
-Add to `YourApp.Infrastructure`:
+Add to the project that owns the `DbContext`:
 
 | Package | Purpose |
 |---|---|
 | `Npgsql.EntityFrameworkCore.PostgreSQL` | EF Core PostgreSQL provider |
 | `EFCore.NamingConventions` | Automatic snake_case naming convention |
 
-Add to `YourApp.Infrastructure.Tests`:
+Add to the test project:
 
 | Package | Purpose |
 |---|---|
@@ -22,23 +22,20 @@ Add to `YourApp.Infrastructure.Tests`:
 
 ## Provider Registration
 
-The bridge skill owns the `dbOptions` action that `dotnet-webapi`'s `AddInfrastructure` accepts.
+This bridge owns the `dbOptions` action supplied to `AddDbContext<AppDbContext>`. The **composition root** and the method that ultimately calls `AddDbContext` are defined by your architecture bridge (e.g. `dotnet-idesign`).
 
 ```csharp
-// YourApp.Host.Api/Program.cs
+// In your composition root (architecture bridge specifies which project and method name).
 var connectionString = builder.Configuration.GetConnectionString("Default");
 
 Action<DbContextOptionsBuilder> dbOptions = options => options
     .UseNpgsql(connectionString, npgsql => npgsql
-        .MigrationsAssembly("YourApp.Infrastructure")
+        .MigrationsAssembly("<DbContextAssemblyName>")   // assembly that owns DbContext + migrations
         .EnableRetryOnFailure(maxRetryCount: 3))
     .UseSnakeCaseNamingConvention();   // maps PascalCase → snake_case automatically
 
-builder.Services
-    .AddUtilities()
-    .AddDomain()
-    .AddApplication()
-    .AddInfrastructure(builder.Configuration, dbOptions);
+// Pass dbOptions to whichever registration method your architecture bridge defines.
+// The method calls: services.AddDbContext<AppDbContext>(dbOptions);
 ```
 
 ---
@@ -76,7 +73,7 @@ public class OrderEntityConfiguration : IEntityTypeConfiguration<OrderEntity>
             .HasConversion<string>()
             .IsRequired();
 
-        // Value object → owned columns
+        // Value object → owned columns (when composing with ddd-tactical-patterns)
         builder.OwnsOne(o => o.TotalAmount, money =>
         {
             money.Property(m => m.Amount)
@@ -97,14 +94,16 @@ public class OrderEntityConfiguration : IEntityTypeConfiguration<OrderEntity>
 
 ## Migrations
 
+The architecture bridge specifies which project owns the `DbContext` and which is the startup project. Use those in the CLI invocation:
+
 ```bash
 dotnet ef migrations add <Name> \
-  --project YourApp.Infrastructure \
-  --startup-project YourApp.Host.Api
+  --project src/<DbContextProject> \
+  --startup-project src/<StartupProject>
 
 dotnet ef database update \
-  --project YourApp.Infrastructure \
-  --startup-project YourApp.Host.Api
+  --project src/<DbContextProject> \
+  --startup-project src/<StartupProject>
 ```
 
 Rules:
@@ -129,6 +128,93 @@ Never hardcode connection strings.
 ```
 
 Include `Include Error Detail=true` in development only.
+
+---
+
+## Multi-Context Database Configuration
+
+When multiple bounded contexts share a PostgreSQL server, each context's `DbContext` targets its own isolated unit. The isolation strategy is decided by `ddd-strategic-patterns` — this bridge implements it.
+
+### Database-per-Context (Recommended)
+
+Each context's connection string points to a different database on the same server. No EF Core schema configuration is needed — the context owns the entire database.
+
+```json
+// Identity app — appsettings.Development.json
+{
+  "ConnectionStrings": {
+    "Default": "Host=localhost;Port=5432;Database=identity;Username=app_user;Password=dev_password;Include Error Detail=true"
+  }
+}
+
+// Forum app — appsettings.Development.json
+{
+  "ConnectionStrings": {
+    "Default": "Host=localhost;Port=5432;Database=forum;Username=app_user;Password=dev_password;Include Error Detail=true"
+  }
+}
+```
+
+In Docker Compose, the connection string uses the Compose service name as the host:
+```
+Host=db;Port=5432;Database=identity;Username=app;Password=...
+Host=db;Port=5432;Database=forum;Username=app;Password=...
+```
+
+Use an init script to create the databases on first run (see `docker` skill for the pattern).
+
+### Schema-per-Context (Alternative)
+
+All contexts share one database. Each `DbContext` targets a specific schema using `HasDefaultSchema`.
+
+```csharp
+// In OnModelCreating or a shared configuration base
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    modelBuilder.HasDefaultSchema("identity");   // or "forum"
+    modelBuilder.ApplyConfigurationsFromAssembly(typeof(IdentityDbContext).Assembly);
+}
+```
+
+Rules:
+- Use `HasDefaultSchema` in `OnModelCreating` — not per-entity. This ensures all tables and the migrations history table land in the correct schema.
+- Set the migrations history table schema to match:
+  ```csharp
+  options.UseNpgsql(connectionString, npgsql => npgsql
+      .MigrationsHistoryTable("__EFMigrationsHistory", "identity"));
+  ```
+- Each context runs its own `dotnet ef` commands independently. Migrations never cross schema boundaries.
+
+### Compose Migration Services
+
+When using `dotnet-webapi-docker`'s migration-as-a-service pattern with multiple contexts, define one migration service per context:
+
+```yaml
+services:
+  migrate-identity:
+    image: identity-migrations:latest
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      ConnectionStrings__Default: Host=db;Port=5432;Database=identity;...
+    restart: "no"
+
+  migrate-forum:
+    image: forum-migrations:latest
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      ConnectionStrings__Default: Host=db;Port=5432;Database=forum;...
+    restart: "no"
+
+  identity-api:
+    depends_on:
+      migrate-identity: { condition: service_completed_successfully }
+
+  forum-api:
+    depends_on:
+      migrate-forum: { condition: service_completed_successfully }
+```
 
 ---
 

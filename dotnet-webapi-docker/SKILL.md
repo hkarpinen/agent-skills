@@ -1,6 +1,6 @@
 ---
 name: dotnet-webapi-docker
-description: Connects a .NET Web API project to Docker, implementing general Docker conventions for the .NET SDK and ASP.NET Core runtime. Use when writing a Dockerfile for a .NET Web API project, structuring the multi-stage .NET build pipeline, configuring Docker Compose for a .NET API, or applying .NET-specific container conventions. Use alongside dotnet-webapi and docker — this skill bridges the two.
+description: Connects a .NET Web API project to Docker, implementing general Docker conventions for the .NET SDK and ASP.NET Core runtime. Use when writing a Dockerfile for a .NET Web API project, structuring the multi-stage .NET build pipeline, configuring Docker Compose for a .NET API, or applying .NET-specific container conventions.
 ---
 
 ## Base Images
@@ -39,20 +39,24 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0-noble AS restore
 WORKDIR /src
 
 # Copy only project files first — NuGet restore layer is cached until .csproj files change.
-COPY ["src/YourApp.Host.Api/YourApp.Host.Api.csproj",             "src/YourApp.Host.Api/"]
-COPY ["src/YourApp.Application/YourApp.Application.csproj",       "src/YourApp.Application/"]
-COPY ["src/YourApp.Domain/YourApp.Domain.csproj",                 "src/YourApp.Domain/"]
-COPY ["src/YourApp.Infrastructure/YourApp.Infrastructure.csproj", "src/YourApp.Infrastructure/"]
-COPY ["src/YourApp.Utilities/YourApp.Utilities.csproj",           "src/YourApp.Utilities/"]
+# List projects from least-volatile to most-volatile so a change to the
+# host project does not bust the cache for shared libraries.
+# The architecture bridge specifies the actual project
+# names and their volatility order.
+COPY ["src/<SharedLib>/<SharedLib>.csproj",       "src/<SharedLib>/"]
+COPY ["src/<DomainProject>/<DomainProject>.csproj", "src/<DomainProject>/"]
+COPY ["src/<AppProject>/<AppProject>.csproj",     "src/<AppProject>/"]
+COPY ["src/<DataProject>/<DataProject>.csproj",   "src/<DataProject>/"]
+COPY ["src/<HostProject>/<HostProject>.csproj",   "src/<HostProject>/"]
 
-RUN dotnet restore "src/YourApp.Host.Api/YourApp.Host.Api.csproj"
+RUN dotnet restore "src/<HostProject>/<HostProject>.csproj"
 
 # ─────────────────────────────────────────
 # Stage 2 — build
 # ─────────────────────────────────────────
 FROM restore AS build
 COPY . .
-RUN dotnet build "src/YourApp.Host.Api/YourApp.Host.Api.csproj" \
+RUN dotnet build "src/<HostProject>/<HostProject>.csproj" \
     --configuration Release \
     --no-restore
 
@@ -60,7 +64,7 @@ RUN dotnet build "src/YourApp.Host.Api/YourApp.Host.Api.csproj" \
 # Stage 3 — publish
 # ─────────────────────────────────────────
 FROM build AS publish
-RUN dotnet publish "src/YourApp.Host.Api/YourApp.Host.Api.csproj" \
+RUN dotnet publish "src/<HostProject>/<HostProject>.csproj" \
     --configuration Release \
     --no-build \
     --output /app/publish
@@ -75,7 +79,7 @@ COPY --from=publish /app/publish .
 # Use Microsoft's built-in non-root user — do not create a new one
 USER app
 
-ENTRYPOINT ["dotnet", "YourApp.Host.Api.dll"]
+ENTRYPOINT ["dotnet", "<HostProject>.dll"]
 ```
 
 Rules:
@@ -93,15 +97,16 @@ Rules:
 ## NuGet Layer Caching
 
 The order of individual `COPY` instructions for project files determines cache sensitivity.
-List projects from least-volatile to most-volatile so that a change to the API host project
-does not bust the cache for shared utility or domain projects.
+List projects from least-volatile to most-volatile (shared libraries → domain → application → data-access → host)
+so that a change to the host project does not bust the cache for shared library projects.
+The architecture bridge specifies the actual project names and their volatility order.
 
 Rules:
 - Copy each `.csproj` individually with its destination path mirroring the source tree structure.
 - Never use `COPY . .` before `dotnet restore` — it defeats layer caching by invalidating on any
   source file change.
 - When a new project is added to the solution, add its `COPY` line to the restore stage.
-- Test projects are not included. They are never built in the production Docker image.
+- The `Tests` project is not included. It is never built in the production Docker image.
 
 ---
 
@@ -114,7 +119,7 @@ values into the image with `ENV` instructions.
 |---|---|---|
 | `ASPNETCORE_ENVIRONMENT` | Selects `appsettings.{env}.json` and framework behavior | `Development`, `Production` |
 | `ASPNETCORE_URLS` | Binds the Kestrel listener | `http://+:8080` |
-| `ConnectionStrings__Default` | Overrides the `Default` connection string from `appsettings.json` | `Host=db;Port=5432;...` |
+| `ConnectionStrings__Default` | Overrides the `Default` connection string from `appsettings.json` | `Host=db;Port=5432;...` or `Server=db;...` |
 
 Rules:
 - Never put `ASPNETCORE_ENVIRONMENT=Development` in the Dockerfile — that bakes dev behavior into
@@ -128,7 +133,62 @@ Rules:
 
 ---
 
-## Docker Compose for .NET + PostgreSQL
+## Running EF Core Migrations in Containers
+
+`dotnet-webapi` forbids applying migrations at application startup: a crashing
+replica that auto-migrates is a destructive operation disguised as a health
+issue. The container image therefore must not run `dotnet ef database update`
+from `Program.cs`. Pick one of the following strategies instead:
+
+| Strategy | Approach | When to use |
+|---|---|---|
+| **SQL script from CI/CD** | `dotnet ef migrations script --idempotent` in CI; apply the `.sql` from the deployment pipeline (Flyway, psql, Helm hook, etc.) | **Default for production**. Migration is reviewed, auditable, and decoupled from the runtime image. |
+| **Migration bundle binary** | `dotnet ef migrations bundle --self-contained`; ship the bundle as a separate image; run it as an init container / Compose `depends_on` service before the API | Kubernetes / Compose deployments that want migration-as-code without shipping the full SDK to production |
+| **`dotnet ef` in a one-shot container** | Build a side image `FROM sdk` with the source mounted; run `dotnet ef database update` once per deploy | Local dev and CI test environments only — never production |
+
+Rules:
+- Never apply migrations from the API container's startup path. Rolling
+  deployments will race multiple replicas against one schema.
+- The production runtime image (ASP.NET runtime, not SDK) cannot run
+  `dotnet ef` — the EF Core tools require the SDK. Either emit SQL from CI or
+  build a dedicated migrations image from the SDK base.
+- The migrations image is never the same as the API image. Do not add the SDK
+  to the API image just to get `dotnet ef`.
+
+### Compose pattern — one-shot migrations service
+
+For local dev parity with production, run migrations as a separate Compose
+service that runs to completion before the API starts.
+
+```yaml
+services:
+  migrate:
+    image: your-api-migrations:latest   # built from the migrations bundle
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Default: Host=db;Port=5432;Database=yourapp;Username=app_user;Password=dev_password
+    restart: "no"                       # run once, exit
+
+  api:
+    build:
+      context: .
+      target: final
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+```
+
+`condition: service_completed_successfully` (Compose V2) gates the API on a
+clean migration exit. A non-zero migration exit blocks API startup — which is
+the behaviour you want.
+
+---
+
+## Docker Compose for .NET API
 
 ```yaml
 # compose.yaml
@@ -151,38 +211,37 @@ services:
     restart: unless-stopped
 
   db:
-    image: postgres:16.3-alpine3.20
-    environment:
-      POSTGRES_DB: yourapp
-      POSTGRES_USER: app_user
-      POSTGRES_PASSWORD: dev_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - db_data:/var/lib/postgresql/data
+    # Image, environment, healthcheck, and volumes depend on your database.
+    # The DB bridge skill (e.g. dotnet-efcore-postgres) specifies the
+    # database-specific Compose service definition.
+    image: <database-image>
+    env_file:
+      - .env
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app_user -d yourapp"]
+      test: ["CMD-SHELL", "<db-ready-check>"]
       interval: 5s
       timeout: 5s
       retries: 5
+    volumes:
+      - db_data:<db-data-path>
 
 volumes:
   db_data:
 ```
 
-Place the connection string in `.env` (never committed to version control):
+Place secrets in `.env` (never committed to version control):
 
 ```env
 # .env
-ConnectionStrings__Default=Host=db;Port=5432;Database=yourapp;Username=app_user;Password=dev_password
+ConnectionStrings__Default=<connection-string-using-db-as-hostname>
 ```
 
 Rules:
 - Reference the Compose service name (`db`) as the hostname in the connection string, not
   `localhost`. Compose networking routes the service name to the database container's IP.
-- Use `depends_on` with `condition: service_healthy` so the API waits for PostgreSQL's `pg_isready`
-  check before starting — not just for the container to exist.
-- Never hard-code `POSTGRES_PASSWORD` or the connection string in `compose.yaml`. Provide them
+- Use `depends_on` with `condition: service_healthy` so the API waits for the database
+  health check before starting — not just for the container to exist.
+- Never hard-code passwords or the connection string in `compose.yaml`. Provide them
   via `.env` and document placeholders in `.env.example`.
 - `ASPNETCORE_ENVIRONMENT` and `ASPNETCORE_URLS` are safe to set directly in `compose.yaml` —
   they are not secrets and are environment-specific by design.

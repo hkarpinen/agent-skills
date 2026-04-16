@@ -4,14 +4,13 @@
 
 Generate identity in the domain layer before persistence. No database round-trip required.
 
-```csharp
-public record OrderId(Guid Value)
-{
-    public static OrderId New() => new(Guid.NewGuid());
-}
+```
+value OrderId(Value: uuid)
+    static New() -> OrderId
+        return OrderId(newUuid())
 
 // Usage
-var order = Order.Create(OrderId.New(), customerId, lines);
+order = Order.Create(OrderId.New(), customerId, lines)
 ```
 
 **Advantages**:
@@ -35,11 +34,10 @@ The database generates the ID on insert. Domain object receives ID after persist
 
 Identity derived from domain-meaningful attributes (e.g., ISBN for books, email for users).
 
-```csharp
-public record UserId(string Email)
-{
-    public UserId(string email) : this(email.ToLowerInvariant()) { }
-}
+```
+value UserId(Email: string)
+    constructor(email)
+        Email = lowercase(email)
 ```
 
 **Use sparingly**: Natural keys can change due to domain rules, complicating updates.
@@ -48,12 +46,12 @@ public record UserId(string Email)
 
 Wrap primitive types to prevent ID mixing.
 
-```csharp
-public record OrderId(Guid Value);
-public record CustomerId(Guid Value);
-public record ProductId(Guid Value);
+```
+value OrderId(Value: uuid)
+value CustomerId(Value: uuid)
+value ProductId(Value: uuid)
 
-// Compiler error — cannot pass CustomerId where OrderId expected
-void ProcessOrder(OrderId orderId) { }
-ProcessOrder(customerId);  // ❌ Compile error
+// Compiler/type error — cannot pass CustomerId where OrderId expected
+ProcessOrder(orderId: OrderId) -> void
+ProcessOrder(customerId)  // ❌ Type error
 ```

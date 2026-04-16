@@ -1,9 +1,8 @@
 # Integration Testing with Testcontainers
 
-PostgreSQL-specific integration test setup. Each test collection shares one container to avoid per-test startup overhead.
+PostgreSQL-specific integration test setup. Each test collection shares one container to avoid per-test startup overhead. For xUnit lifecycle patterns (fixture sharing, collection definitions, isolation strategies), see `dotnet-testing/references/TESTCONTAINERS.md`.
 
 ```csharp
-// Tests/Infrastructure/PostgresFixture.cs
 public class PostgresFixture : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
@@ -21,7 +20,7 @@ public class PostgresFixture : IAsyncLifetime
 
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseNpgsql(_container.GetConnectionString(), npgsql =>
-                npgsql.MigrationsAssembly("YourApp.Infrastructure"))
+                npgsql.MigrationsAssembly(typeof(AppDbContext).Assembly.GetName().Name))
             .UseSnakeCaseNamingConvention()
             .Options;
 
@@ -39,7 +38,6 @@ public class PostgresFixture : IAsyncLifetime
 [CollectionDefinition("Postgres")]
 public class PostgresCollection : ICollectionFixture<PostgresFixture> { }
 
-// Tests/Orders/OrderRepositoryTests.cs
 [Collection("Postgres")]
 public class OrderRepositoryTests
 {

@@ -1,0 +1,212 @@
+---
+name: messaging
+description: Asynchronous messaging patterns for cross-context integration — outbox pattern, event envelopes, idempotent consumers, at-least-once delivery, and dead-letter handling. Use when implementing domain event publishing between bounded contexts, designing event-driven integration, choosing a delivery guarantee, or setting up an outbox. Language, stack, and broker agnostic. Does NOT cover in-process domain event dispatching within a single context (see the architecture bridge) or event schema design (see `ddd-strategic-patterns`).
+---
+
+## Scope
+
+This skill owns the **transport-agnostic mechanics** of moving domain events between bounded contexts. It sits between `ddd-strategic-patterns` (which decides what events exist and which contexts publish/subscribe) and a broker-specific bridge (which wires a concrete transport).
+
+| This skill owns | Other skills own |
+|---|---|
+| Outbox pattern and guarantees | Which events to publish (`ddd-strategic-patterns`) |
+| Event envelope structure | Event payload schema and versioning (`ddd-strategic-patterns`) |
+| Idempotent consumer pattern | In-process domain event dispatch within one context (architecture bridge) |
+| Dead-letter and retry strategy | Broker-specific configuration (messaging bridge) |
+| Ordering and partitioning principles | Specific broker topology (messaging bridge) |
+
+---
+
+## The Outbox Pattern
+
+Never publish an event directly from application code. The write to the database and the dispatch to the broker must be atomic — otherwise a crash between them loses the event or publishes without persisting.
+
+### How It Works
+
+1. The application layer saves the aggregate **and** writes an outbox record in the **same database transaction**.
+2. A background process reads unpublished outbox records and forwards them to the message broker.
+3. On successful broker acknowledgment, the outbox record is marked as published.
+
+```
+┌──────────────────────────────────────────────────┐
+│  Application Transaction                         │
+│                                                  │
+│  1. Save aggregate  ──→  aggregates table        │
+│  2. Write event     ──→  outbox table            │
+│                                                  │
+│  COMMIT (atomic)                                 │
+└──────────────────────────────────────────────────┘
+         │
+         ▼
+┌──────────────────────────────────────────────────┐
+│  Outbox Publisher (background process)           │
+│                                                  │
+│  1. SELECT * FROM outbox WHERE published = false  │
+│     ORDER BY created_at LIMIT N                  │
+│  2. Publish each to broker                       │
+│  3. UPDATE outbox SET published = true            │
+└──────────────────────────────────────────────────┘
+```
+
+### Outbox Table Schema
+
+```sql
+CREATE TABLE <schema>.outbox (
+    id           uuid         NOT NULL,
+    event_type   text         NOT NULL,
+    payload      jsonb        NOT NULL,
+    created_at   timestamptz  NOT NULL DEFAULT now(),
+    published    boolean      NOT NULL DEFAULT false,
+    published_at timestamptz,
+    CONSTRAINT pk_outbox PRIMARY KEY (id)
+);
+
+CREATE INDEX ix_outbox_unpublished ON <schema>.outbox (created_at)
+    WHERE published = false;
+```
+
+Rules:
+- The outbox table lives in the **publisher's schema** — it is owned by the bounded context that publishes the event.
+- Use a partial index on `published = false` for efficient polling.
+- The outbox publisher runs as a background process (hosted service, cron job, or change-data-capture). Never poll from the request path.
+- Retain published records for a configurable period (e.g., 7 days) for debugging, then delete. Do not accumulate indefinitely.
+
+---
+
+## Event Envelope
+
+Every event published to the broker is wrapped in a standard envelope. The envelope carries metadata; the payload carries the domain event.
+
+```json
+{
+  "id": "a1b2c3d4-...",
+  "type": "identity.user_registered",
+  "source": "identity",
+  "timestamp": "2026-01-15T14:30:00Z",
+  "correlationId": "req-5678-...",
+  "payload": {
+    "userId": "f9e8d7c6-...",
+    "email": "user@example.com",
+    "displayName": "Jane Doe"
+  }
+}
+```
+
+### Envelope Fields
+
+| Field | Type | Purpose |
+|---|---|---|
+| `id` | uuid | Unique per event instance. Used for idempotency checks by consumers. |
+| `type` | string | Dot-separated: `<context>.<event_name>`. Used for routing and filtering. |
+| `source` | string | Publishing bounded context name. |
+| `timestamp` | ISO 8601 | When the event occurred (domain time, not publish time). |
+| `correlationId` | string | Ties the event to the originating request or workflow. Optional but recommended. |
+| `payload` | object | The domain event data. Schema is defined by `ddd-strategic-patterns`. |
+
+Rules:
+- The envelope format is the same regardless of broker. Only the transport encoding (JSON, Protobuf, Avro) varies.
+- `id` is generated by the publisher at outbox write time — not by the broker.
+- `type` uses dot notation: `identity.user_registered`, `forum.post_created`. This is the routing key for consumers.
+- Never include the full aggregate state in the payload. Include only the IDs, changed fields, and data needed by downstream consumers.
+
+---
+
+## Delivery Guarantees
+
+### At-Least-Once Delivery (Default)
+
+The outbox pattern guarantees at-least-once delivery: if the publisher crashes after sending but before marking published, it will resend on recovery. This means consumers **will** receive duplicates.
+
+Rules:
+- Never assume exactly-once delivery. Always design consumers to handle duplicates.
+- The outbox publisher retries indefinitely until the broker acknowledges. Use exponential backoff between retries.
+- If a message fails after a configured number of retries, move it to a dead-letter queue for manual inspection — do not block the pipeline.
+
+### At-Most-Once (Fire-and-Forget)
+
+Publish without an outbox. Acceptable only for non-critical notifications (e.g., analytics pings) where losing an event is tolerable. Never use for cross-context state synchronization.
+
+---
+
+## Idempotent Consumers
+
+Because delivery is at-least-once, every consumer must be idempotent — processing the same event twice produces the same outcome as processing it once.
+
+### Deduplication Table Strategy
+
+```sql
+CREATE TABLE <schema>.processed_events (
+    event_id     uuid         NOT NULL,
+    processed_at timestamptz  NOT NULL DEFAULT now(),
+    CONSTRAINT pk_processed_events PRIMARY KEY (event_id)
+);
+```
+
+Consumer logic:
+```
+receive(envelope):
+    if exists in processed_events(envelope.id)
+        return  // already handled — skip
+
+    within transaction:
+        apply business logic (e.g., upsert local projection)
+        insert envelope.id into processed_events
+
+    acknowledge message to broker
+```
+
+Rules:
+- Check-and-insert must be in the **same transaction** as the business logic. Otherwise a crash between them causes double-processing.
+- Prune the `processed_events` table periodically (e.g., delete records older than 30 days). Messages older than the retention window will not be replayed.
+- If the business operation is naturally idempotent (e.g., `UPSERT` on a projection table), the deduplication table is optional but still recommended as a safety net.
+
+---
+
+## Dead-Letter Handling
+
+Messages that fail processing after all retries must not be discarded silently. Route them to a dead-letter queue (DLQ).
+
+Rules:
+- Define a maximum retry count per consumer (e.g., 5 retries with exponential backoff).
+- After exhausting retries, move the message to a DLQ with the original envelope plus the error details.
+- Monitor DLQ depth — a non-empty DLQ is an operational alert.
+- Provide a manual mechanism to replay messages from the DLQ back to the original queue after the root cause is fixed.
+- Never auto-replay from DLQ — that turns a human-review queue into an infinite retry loop.
+
+---
+
+## Ordering and Partitioning
+
+Rules:
+- Events for the **same aggregate** must be processed in order. Events for different aggregates can be processed in parallel.
+- Use the aggregate root ID as the partition key. This ensures all events for one aggregate land on the same partition and are consumed sequentially.
+- Never use a global ordering guarantee across all events — it destroys throughput and is almost never needed.
+- If a consumer processes events from multiple event types, order within a partition is still by `timestamp`.
+
+---
+
+## Broker Selection Guidance
+
+This skill does not prescribe a broker. The messaging bridge does. Common options:
+
+| Broker | Strengths | When to prefer |
+|---|---|---|
+| **Database-backed outbox only** (polling) | No new infrastructure; simplest to operate | Small systems, <100 events/sec, team does not want to operate a broker |
+| **RabbitMQ** | Flexible routing, mature, well-supported | Most .NET and JVM workloads; moderate throughput |
+| **Apache Kafka** | High throughput, durable log, replay | Event sourcing, high-volume streaming, audit log requirements |
+| **Redis Streams** | Lightweight, already in stack | Simple pub/sub, team already runs Redis |
+| **NATS** | Ultra-lightweight, cloud-native | Microservices mesh, Kubernetes-native environments |
+| **Cloud-managed** (SQS/SNS, Azure Service Bus, Google Pub/Sub) | Zero operational burden | Cloud-native deployments, team wants managed infrastructure |
+
+For most systems starting out: use the **database-backed outbox with polling** (no separate broker). Upgrade to a dedicated broker when throughput or fan-out requirements exceed what polling can deliver.
+
+---
+
+## Companion Skills
+
+| When you need | Skill |
+|---|---|
+| Decide what events exist and which contexts publish/subscribe | `ddd-strategic-patterns` |
+| Event payload schema format and versioning | `ddd-strategic-patterns` (see `references/EVENT-SCHEMAS.md`) |
+| Wire this pattern to a .NET application | The messaging bridge (e.g. `dotnet-messaging`) |
+| Wire the outbox table to PostgreSQL | The database skill (e.g. `db-postgres`) |

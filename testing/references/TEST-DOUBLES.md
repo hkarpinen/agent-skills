@@ -70,22 +70,22 @@ mock.Verify(x => x.PublishAsync(It.IsAny<OrderCreated>()), Times.Once);
 
 **Problem**: Mocking everything makes tests brittle and tightly coupled to implementation.
 
-```csharp
+```
 // ❌ Bad — over-mocked
-var customerMock = new Mock<ICustomer>();
-var addressMock = new Mock<IAddress>();
-customerMock.Setup(c => c.Address).Returns(addressMock.Object);
-addressMock.Setup(a => a.Country).Returns("USA");
+customerMock = mock(Customer)
+addressMock = mock(Address)
+customerMock.Address returns addressMock
+addressMock.Country returns "USA"
 ```
 
 **Fix**: Use real objects where possible.
 
-```csharp
+```
 // ✅ Good — real domain objects
-var customer = CustomerBuilder
+customer = CustomerBuilder
     .ACustomer()
     .InCountry("USA")
-    .Build();
+    .Build()
 ```
 
 **Rule**: Only mock at architectural boundaries (repositories, external services, infrastructure).

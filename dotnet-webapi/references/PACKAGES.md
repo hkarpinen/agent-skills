@@ -1,54 +1,73 @@
 # Complete Package List
 
-## Client (YourApp.Host.Api)
+Organized by **concern**, not by project. Which project each package lands in
+is an architecture decision — see the architecture bridge you loaded (e.g.
+`dotnet-idesign`).
+
+## API Surface
 
 | Package | Purpose |
 |---|---|
 | `Swashbuckle.AspNetCore` | Swagger UI and OpenAPI spec |
 | `Microsoft.AspNetCore.OpenApi` | OpenAPI metadata for Minimal APIs |
-| `FluentValidation.AspNetCore` | Validator registration and DI integration |
 
-## Application (YourApp.Application)
-
-No additional packages. Managers are pure orchestration.
-
-## Domain (YourApp.Domain)
+## Request Validation
 
 | Package | Purpose |
 |---|---|
-| `Ardalis.GuardClauses` | Guard clause helpers for invariant enforcement |
+| `FluentValidation` | Core validation library |
+| `FluentValidation.AspNetCore` | ASP.NET Core integration |
+| `FluentValidation.DependencyInjectionExtensions` | `AddValidatorsFromAssembly*` helpers |
 
-## Infrastructure (YourApp.Infrastructure)
+## Data Access — EF Core (core packages only)
 
 | Package | Purpose |
 |---|---|
 | `Microsoft.EntityFrameworkCore` | Core EF |
 | `Microsoft.EntityFrameworkCore.Tools` | Migrations CLI (`dotnet ef`) |
 | `Microsoft.EntityFrameworkCore.Design` | Design-time tooling |
+
+> The **DB provider package** (e.g. `Npgsql.EntityFrameworkCore.PostgreSQL`,
+> `Microsoft.EntityFrameworkCore.SqlServer`) is supplied by the DB bridge skill.
+> Do not add a provider package here.
+
+## Identity and Authentication
+
+| Package | Purpose |
+|---|---|
 | `Microsoft.AspNetCore.Identity.EntityFrameworkCore` | Identity with EF Core persistence |
 | `Microsoft.AspNetCore.Authentication.JwtBearer` | JWT bearer token validation |
 | `System.IdentityModel.Tokens.Jwt` | JWT token generation |
-| `Microsoft.Extensions.Http.Resilience` | Polly v8 wrapper for outbound HttpClient |
 
-> **DB provider package** (e.g. `Npgsql.EntityFrameworkCore.PostgreSQL`) is supplied
-> by the bridge skill. Do not add a provider package to `YourApp.Infrastructure` directly.
+## HTTP Resilience (outbound clients)
 
-## Cross-cutting (YourApp.Utilities)
+| Package | Purpose |
+|---|---|
+| `Microsoft.Extensions.Http.Resilience` | Polly v8 wrapper for `HttpClient` |
+
+## Observability
 
 | Package | Purpose |
 |---|---|
 | `Serilog.AspNetCore` | Serilog host integration |
 | `Serilog.Sinks.Console` | Console sink |
 | `Serilog.Sinks.File` | File sink |
-| `Serilog.Enrichers.Environment` | Environment/machine name enrichment |
+| `Serilog.Enrichers.Environment` | Environment / machine-name enrichment |
 | `Serilog.Enrichers.Thread` | Thread ID enrichment |
 | `OpenTelemetry.Extensions.Hosting` | OTel hosting integration |
 | `OpenTelemetry.Instrumentation.AspNetCore` | HTTP request tracing |
 | `OpenTelemetry.Instrumentation.Http` | Outbound HTTP tracing |
 | `OpenTelemetry.Instrumentation.EntityFrameworkCore` | EF Core query tracing |
+| `OpenTelemetry.Instrumentation.Runtime` | .NET runtime metrics |
 | `OpenTelemetry.Exporter.OpenTelemetryProtocol` | OTLP exporter |
 
-## Test Projects
+## Domain Guard Helpers
+
+| Package | Purpose |
+|---|---|
+| `Ardalis.GuardClauses` | Guard-clause helpers for invariant enforcement |
+
+## Testing
 
 | Package | Purpose |
 |---|---|
@@ -56,6 +75,6 @@ No additional packages. Managers are pure orchestration.
 | `Moq` | Mocking |
 | `FluentAssertions` | Assertion library |
 | `FluentValidation.TestHelper` | Validator unit testing |
-| `Testcontainers.MsSql` / `Testcontainers.PostgreSql` | Real DB in Docker |
+| `Testcontainers.*` (e.g. `Testcontainers.PostgreSql`) | Real DB in Docker (provider supplied by DB bridge) |
 | `coverlet.collector` | Code coverage collection |
-| `Microsoft.AspNetCore.Mvc.Testing` | WebApplicationFactory for Host tests |
+| `Microsoft.AspNetCore.Mvc.Testing` | `WebApplicationFactory` for HTTP tests |

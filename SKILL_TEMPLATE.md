@@ -25,6 +25,8 @@ Add or remove sections as needed. There is no required number of sections.
 Every section should answer a specific question a practitioner would have.
 Avoid generic introductory sections — start with the first real rule.
 
-Note: If this skill composes with other skills, mention them in the description field
-in the YAML frontmatter above.
+Frontmatter fields:
+- name:        Unique skill identifier (lowercase, hyphens).
+- description: What the skill does and when to use it. Max 1024 chars.
+               Include trigger keywords and what it does NOT cover.
 -->

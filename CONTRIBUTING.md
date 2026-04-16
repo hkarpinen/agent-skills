@@ -12,51 +12,69 @@ skills-repo/
 ├── CONTRIBUTING.md                    ← this file
 ├── SKILL_TEMPLATE.md                  ← starting point for new skills
 ├── index.md                           ← agent registry — all skills, descriptions, pipelines
-├── install.sh                         ← installer script for consumers
-├── .github/
-│   └── workflows/
-│       └── release.yml                ← builds .skill artifacts on git tag push
-├── architecture/                      ← language and stack agnostic design skills
-├── backend/                           ← language/stack-specific implementation skills
-├── database/                          ← database-specific skills (stack agnostic)
-└── bridge/                            ← skills that connect two other skills together
+├── righting-software/                 ← each skill is a directory
+│   ├── SKILL.md                       ← main skill content
+│   └── references/                    ← optional detailed examples (loaded on demand)
+│       ├── ANTI-PATTERNS.md
+│       └── VOLATILITY-ANALYSIS.md
+├── dotnet-webapi/
+│   ├── SKILL.md
+│   └── references/
+├── db-postgres/
+│   ├── SKILL.md
+│   └── references/
+└── ...
 ```
 
 ### Skill Categories
 
-| Directory | Purpose | Examples |
+| Category | Purpose | Examples |
 |---|---|---|
-| `architecture/` | Design methodology, patterns, principles. No technology references. | `righting-software` |
-| `backend/` | Language/stack-specific implementation conventions. | `dotnet-webapi`, `dotnet-testing` |
-| `database/` | Database design conventions. Stack agnostic — no ORM references. | `db-postgres` |
-| `bridge/` | Connects a backend skill to a database skill. Owns the ORM wiring. | `dotnet-efcore-postgres` |
+| Architecture | Design methodology, patterns, principles. No technology references. | `righting-software`, `ddd-strategic-patterns` |
+| Domain Modeling | Domain patterns. Language agnostic — examples use pseudocode. | `ddd-tactical-patterns` |
+| Backend | Language/stack-specific implementation conventions. | `dotnet-webapi` |
+| Testing | Test strategy (agnostic) and platform-specific test bridges. | `testing`, `dotnet-testing` |
+| Database | Database design conventions. Stack agnostic — no ORM references. | `db-postgres` |
+| Frontend | Client-side framework conventions. Backend agnostic. | `react-spa`, `nextjs-app` |
+| Infrastructure | Container and deployment patterns. Stack agnostic. | `docker` |
+| Bridge | Connects two other skills. Owns the wiring that requires knowledge of both sides. | `dotnet-efcore-postgres`, `dotnet-idesign`, `ddd-idesign-bridge` |
 
 ---
 
 ## Skill Authoring Guide
 
-### The Single-File Rule
+### Skill Directory Layout
 
-Every skill is a single self-contained markdown file. No subdirectories, no includes,
-no references to other files in the repo. A consumer installs individual skill files —
-they must be fully readable in isolation.
+Every skill is a directory containing a `SKILL.md` file:
+
+```
+skill-name/
+├── SKILL.md              ← main skill content (concise, <500 lines)
+└── references/           ← optional detailed examples, loaded on demand
+    └── TOPIC.md
+```
+
+`SKILL.md` must be fully readable in isolation — a consumer who loads only the main
+file gets all rules and conventions. Reference files provide extended examples and
+patterns that agents load when they need deeper detail on a specific topic.
 
 ### Required Sections
 
 Every skill file must open with:
 
 ```markdown
-# skill-name
-
-> One sentence describing what this skill does.
-
-**When to use this skill**: ...
-
-**Composes with**: ... (or omit if the skill stands alone)
+---
+name: skill-name
+description: ...
+---
 ```
 
-The `**When to use this skill**` section is the most important — it is what agents
-read to decide whether to load the skill. Be specific about triggers. Include:
+| Field | Purpose |
+|---|---|
+| `name` | Unique skill identifier |
+| `description` | What the skill does and when to use it (max 1024 chars). Include trigger keywords and what it does NOT cover. |
+
+The `description` field is what agents read to decide whether to load the skill. Be specific about triggers. Include:
 - The task types this skill applies to
 - Specific terms or phrases that indicate this skill is needed
 - What this skill does NOT cover (to avoid over-triggering)
@@ -122,10 +140,7 @@ Example:
 
 1. Name it by goal, not by tools (✅ "Build a .NET Web API with PostgreSQL" not ❌ "righting-software + dotnet-webapi pipeline").
 2. Add it to the **Common Pipelines** table in `index.md` using the `→` / `+` notation.
-3. If the pipeline warrants a `--preset` install shorthand, add the preset to `install.sh`:
-   - Define a `PRESET_NAME` variable with skills listed **in execution order**, left to right.
-   - Add the preset name to the `usage()` and the `--preset` case statement.
-4. Add the pipeline to the **Skill Pipelines** table in `README.md`.
+3. Add the pipeline to the **Skill Composition** table in `README.md`.
 
 **When to create a new pipeline vs. extend an existing one:**
 - New pipeline: the goal is meaningfully distinct (different domain, different entry point).
@@ -147,10 +162,11 @@ Example:
 
 ### 1. Write the skill file
 
-Copy `SKILL_TEMPLATE.md` to the appropriate directory and fill it in.
+Create a new directory and copy the template:
 
 ```bash
-cp SKILL_TEMPLATE.md backend/dotnet-console.md
+mkdir dotnet-console
+cp SKILL_TEMPLATE.md dotnet-console/SKILL.md
 ```
 
 ### 2. Update `index.md`
@@ -158,45 +174,22 @@ cp SKILL_TEMPLATE.md backend/dotnet-console.md
 Add a row to the appropriate table in `index.md`:
 
 ```markdown
-| `dotnet-console` | `backend/dotnet-console.md` | Building a .NET console application... |
+| `dotnet-console` | `dotnet-console/SKILL.md` | Building a .NET console application... |
 ```
 
 If the new skill belongs in an existing pipeline, add it to the relevant pipeline row
 in the **Common Pipelines** table using `→` for ordered stages and `+` for parallel
 skills within a stage. See **Defining Pipelines** below for the notation rules.
 
-### 3. Update `install.sh`
-
-Add the skill to the `skill_path()` function:
-
-```sh
-skill_path() {
-  case "$1" in
-    # ...existing skills...
-    dotnet-console) echo "backend/dotnet-console.md" ;;
-    *) echo "" ;;
-  esac
-}
-```
-
-Add a description to the `generate_local_index()` function:
-
-```sh
-dotnet-console) DESC="Building a .NET console application host." ;;
-```
-
-If the skill is part of a new preset pipeline, add the preset to the `usage()` function
-and define the preset variable at the top of the script.
-
-### 4. Update the release workflow
+### 3. Update the release workflow
 
 Add the new skill to `.github/workflows/release.yml`:
 
 ```yaml
-zip dist/dotnet-console.skill backend/dotnet-console.md
+zip dist/dotnet-console.skill dotnet-console/SKILL.md
 ```
 
-### 5. Open a pull request
+### 4. Open a pull request
 
 Skill changes are reviewed like code changes. The PR description should state:
 - What the skill covers
@@ -243,29 +236,25 @@ not per-skill. All skills in a release share the same version tag.
 
 ### What consumers see
 
-When a new version is released, consumers who installed with `install.sh` can upgrade:
+Consumers install skills via the [Agent Skills CLI](https://github.com/vercel-labs/skills):
 
 ```bash
-# Upgrade a specific skill
-./skills-upgrade.sh dotnet-webapi
-
-# Upgrade all installed skills to latest
-./skills-upgrade.sh --all
+npx skills add hkarpinen/agent-skills --skill righting-software --skill dotnet-webapi
 ```
 
-Pinned versions are tracked in the consumer project's `.skills/index.md`.
+See `README.md` for preset commands that install common skill combinations.
 
 ---
 
 ## Checklist for New Skills
 
-- [ ] Copied from `SKILL_TEMPLATE.md`
-- [ ] Opens with skill name, one-line description, `When to use`, `Composes with`
-- [ ] Single file, fully self-contained — no external references
+- [ ] Directory created with `SKILL.md` (copied from `SKILL_TEMPLATE.md`)
+- [ ] Opens with `name`, `description` frontmatter
+- [ ] `SKILL.md` is fully readable in isolation (<500 lines)
+- [ ] Reference files (if any) are in `references/` and loaded on demand
 - [ ] Contains no content that belongs in a composing skill
-- [ ] Contains no technology references if it is an architecture or database skill
+- [ ] Architecture/domain/database skills: no technology references in body; technology cross-refs only in `## Companion Skills` table at bottom
+- [ ] Bridge skills: reference only their bridged pair, not unrelated skills
 - [ ] Added to `index.md` table and pipeline rows
-- [ ] Added to `skill_path()` in `install.sh`
-- [ ] Added to `generate_local_index()` in `install.sh`
-- [ ] Added to `release.yml`
+- [ ] Added to `README.md` Available Skills list and relevant presets
 - [ ] PR opened with boundary description

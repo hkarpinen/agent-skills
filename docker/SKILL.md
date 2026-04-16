@@ -1,6 +1,6 @@
 ---
 name: docker
-description: Language-agnostic conventions for authoring Dockerfiles and Docker Compose files. Use when writing or reviewing Dockerfiles, structuring multi-stage builds, selecting base images, hardening containers, or setting up Docker Compose for local development. Stack agnostic — applies to any language or framework. A stack-specific bridge skill (e.g. dotnet-webapi-docker) owns the language-specific implementation of these conventions.
+description: Language-agnostic conventions for authoring Dockerfiles and Docker Compose files. Use when writing or reviewing Dockerfiles, structuring multi-stage builds, selecting base images, hardening containers, or setting up Docker Compose for local development. Stack agnostic — applies to any language or framework. A stack-specific bridge skill owns the language-specific implementation of these conventions.
 ---
 
 ## Multi-stage Builds
@@ -63,7 +63,7 @@ from the first changed instruction onward — so volatile instructions placed ea
 reuse for everything below them.
 
 Rules:
-- Copy dependency manifests (`package.json`, `*.csproj`, `requirements.txt`, `go.mod`) before
+- Copy dependency manifests (`package.json`, `requirements.txt`, `go.mod`, `*.csproj`, etc.) before
   copying application source.
 - Run the dependency install command immediately after copying manifests. This layer is cached
   until the manifests change, even when source code changes.
@@ -109,8 +109,8 @@ USER appuser
 Rules:
 - Create the user and group before `COPY` so ownership is correct at container start.
 - Do not use `USER root` in the final stage for any reason.
-- If the base image ships a non-root user convention (e.g. Microsoft's `app` user in .NET images,
-  or `node` in Node.js images), prefer it over creating a new one.
+- If the base image ships a non-root user convention (e.g. `node` in Node.js images, `app` in
+  .NET images), prefer it over creating a new one.
 
 ### Secrets
 
@@ -141,13 +141,13 @@ secrets or source control data into image layers.
 **/tests
 **/node_modules
 **/.env
-**/obj
-**/bin
 ```
+
+Add language-specific build output directories (`bin`, `obj`, `target`, `dist`, etc.) as needed.
 
 Rules:
 - Exclude source control directories (`.git`).
-- Exclude local dev artifacts (`node_modules`, `bin`, `obj`, `.DS_Store`).
+- Exclude local dev artifacts (`node_modules`, `.DS_Store`, build output directories).
 - Exclude secrets and local config (`.env`, `*.key`, `*.pem`).
 
 ---
@@ -182,17 +182,15 @@ services:
     restart: unless-stopped
 
   db:
-    image: postgres:16.3-alpine3.20
+    image: <database-image>           # e.g. postgres:16-alpine, mysql:8, mcr.microsoft.com/mssql/server
     environment:
-      POSTGRES_DB: myapp
-      POSTGRES_USER: app_user
-      POSTGRES_PASSWORD: dev_password
+      <DB_ENV_VARS>: <values>         # set variables required by the chosen image
     ports:
-      - "5432:5432"
+      - "<host-port>:<container-port>"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - db_data:<data-path>           # e.g. /var/lib/postgresql/data, /var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app_user -d myapp"]
+      test: ["CMD-SHELL", "<db-ready-check>"]  # e.g. pg_isready, mysqladmin ping
       interval: 5s
       timeout: 5s
       retries: 5
@@ -208,7 +206,7 @@ Rules:
   only waits for the container to start, not for the service inside it to be ready.
 - Define a `healthcheck` on every stateful service (database, cache, queue).
 - If a service does not ship a built-in healthcheck command, write one using the service's own
-  readiness probe (e.g. `pg_isready`, `redis-cli ping`, an HTTP `/health` endpoint).
+  readiness probe (e.g. `redis-cli ping`, `pg_isready`, `mysqladmin ping`, an HTTP `/health` endpoint).
 
 ### Volumes
 
@@ -232,3 +230,94 @@ Rules:
   confusion about which value takes precedence (`environment:` wins).
 - Expose ports only when needed for local debugging. Internal service-to-service traffic uses the
   Compose network by default — no port exposure required.
+
+---
+
+## Multi-Service Compose
+
+When a system has multiple backend services, a frontend, and shared infrastructure (database, message broker, cache), define them all in one `compose.yaml`.
+
+```yaml
+# compose.yaml — multi-service example
+services:
+  identity-api:
+    build:
+      context: ./identity
+      dockerfile: Dockerfile
+      target: final
+    environment:
+      ConnectionStrings__DefaultConnection: Host=db;Database=identity;Username=app;Password=${DB_PASSWORD}
+    env_file: [.env]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  forum-api:
+    build:
+      context: ./forum
+      dockerfile: Dockerfile
+      target: final
+    environment:
+      ConnectionStrings__DefaultConnection: Host=db;Database=forum;Username=app;Password=${DB_PASSWORD}
+    env_file: [.env]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - identity-api
+      - forum-api
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./init-databases.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db_data:
+```
+
+### Multiple Databases in One Instance
+
+When bounded contexts each need their own database but share one PostgreSQL instance, use an init script to create extra databases:
+
+```sql
+-- init-databases.sql (mounted into /docker-entrypoint-initdb.d/)
+CREATE DATABASE identity;
+CREATE DATABASE forum;
+```
+
+The `docker-entrypoint-initdb.d/` directory is executed only when the data volume is first created. To re-run, remove the named volume.
+
+### Networking Rules
+
+Rules:
+- All services in one `compose.yaml` share a default network. Use the **service name** as the hostname: `Host=db`, `http://identity-api:8080`.
+- Never hardcode `localhost` in inter-service references — containers are separate hosts.
+- Expose ports to the host only for services that need direct external access (frontend, proxy). Backend services communicate internally without port mappings.
+- If a service must reach a service in a **different** Compose file, define a shared external network in both files.
+
+### Dependency Ordering
+
+Rules:
+- Use `depends_on` with `condition: service_healthy` for all infrastructure dependencies (database, broker, cache). Bare `depends_on` only waits for the container to start, not for the service to be ready.
+- API services depend on their database. The frontend depends on API services (start order only — it should handle API unavailability gracefully).
+- If the message broker is a separate service, API services that publish or consume events also depend on the broker.

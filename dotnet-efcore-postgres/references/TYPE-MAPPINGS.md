@@ -57,7 +57,7 @@ builder.Property(p => p.Tags)
 ## AppDbContext Setup
 
 ```csharp
-public class AppDbContext : IdentityDbContext<AppUser>
+public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -67,15 +67,11 @@ public class AppDbContext : IdentityDbContext<AppUser>
     {
         base.OnModelCreating(builder);
         builder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
-
-        // Identity tables → identity schema
-        builder.Entity<AppUser>().ToTable("users", "identity");
-        builder.Entity<IdentityRole>().ToTable("roles", "identity");
-        builder.Entity<IdentityUserRole<string>>().ToTable("user_roles", "identity");
-        builder.Entity<IdentityUserClaim<string>>().ToTable("user_claims", "identity");
-        builder.Entity<IdentityUserLogin<string>>().ToTable("user_logins", "identity");
-        builder.Entity<IdentityRoleClaim<string>>().ToTable("role_claims", "identity");
-        builder.Entity<IdentityUserToken<string>>().ToTable("user_tokens", "identity");
     }
 }
+```
+
+If your project uses ASP.NET Core Identity, `dotnet-webapi` specifies how to
+inherit from `IdentityDbContext<AppUser>` and map Identity tables to a dedicated
+schema. That is a `dotnet-webapi` concern, not a DB-bridge concern.
 ```

@@ -16,54 +16,41 @@ Repeat for each small behavior increment.
 
 ### 1. Red — Write failing test
 
-```csharp
-[Fact]
-public void Confirm_WhenPending_SetsStatusToConfirmed()
-{
-    var order = OrderBuilder.APendingOrder().Build();
+```
+test Confirm_WhenPending_SetsStatusToConfirmed
+    order = OrderBuilder.APendingOrder().Build()
     
-    order.Confirm();
+    order.Confirm()
     
-    order.Status.Should().Be(OrderStatus.Confirmed);
-}
+    assert order.Status == Confirmed
 // Test fails: Confirm() method doesn't exist
 ```
 
 ### 2. Green — Minimal implementation
 
-```csharp
-public void Confirm()
-{
-    Status = OrderStatus.Confirmed;
-}
+```
+Confirm()
+    Status = Confirmed
 // Test passes
 ```
 
 ### 3. Refactor — Add invariant check
 
-```csharp
-public void Confirm()
-{
-    if (Status != OrderStatus.Pending)
-        throw new DomainException("Only pending orders can be confirmed.");
-    
-    Status = OrderStatus.Confirmed;
-}
+```
+Confirm()
+    if Status != Pending
+        throw "Only pending orders can be confirmed."
+    Status = Confirmed
 // Tests still pass
 ```
 
 ### 4. Red — Add test for invariant
 
-```csharp
-[Fact]
-public void Confirm_WhenNotPending_ThrowsDomainException()
-{
-    var order = OrderBuilder.AConfirmedOrder().Build();
+```
+test Confirm_WhenNotPending_ThrowsDomainException
+    order = OrderBuilder.AConfirmedOrder().Build()
     
-    var act = () => order.Confirm();
-    
-    act.Should().Throw<DomainException>();
-}
+    assert calling order.Confirm() throws DomainException
 // Test passes because we already added the check
 ```
 

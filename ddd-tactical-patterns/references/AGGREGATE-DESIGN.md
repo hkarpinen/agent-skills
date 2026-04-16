@@ -13,22 +13,22 @@ If two objects can be eventually consistent (via domain events), they belong to 
 
 ## Example: E-commerce Order
 
-### ❌ Too Large
-```csharp
+### Too Large
+```
 // Everything in one aggregate
 Order (root)
   ├── OrderLines
-  ├── Customer  // ❌ Too large — customer is its own aggregate
-  ├── Product   // ❌ Too large — product is its own aggregate
-  ├── Payment   // ❌ May be separate aggregate
-  └── Shipment  // ❌ May be separate aggregate
+  ├── Customer        // ❌ Customer is its own aggregate
+  ├── Product         // ❌ Product is its own aggregate
+  ├── Payment         // ❌ May be separate aggregate
+  └── Shipment        // ❌ May be separate aggregate
 ```
 
-### ✅ Right Size
-```csharp
+### Right Size
+```
 // Order aggregate
 Order (root)
-  └── OrderLines  // Must be consistent with order
+  └── OrderLines      // Must be consistent with order
 
 // Separate aggregates reference by ID only
 Order.CustomerId → Customer aggregate
@@ -37,18 +37,14 @@ OrderLine.ProductId → Product aggregate
 
 ## Reference by ID, Not Object
 
-```csharp
+```
 // ❌ Wrong — holding object reference
-public class Order
-{
-    public Customer Customer { get; set; }  // ❌ Aggregate leak
-}
+class Order
+    Customer: Customer      // ❌ Aggregate leak
 
 // ✅ Correct — holding ID only
-public class Order
-{
-    public CustomerId CustomerId { get; }  // ✅ Reference by ID
-}
+class Order
+    CustomerId: CustomerId  // ✅ Reference by ID
 ```
 
 ## Invariant Examples
@@ -63,18 +59,17 @@ public class Order
 
 ## Loading and Saving
 
-### Load Full Aggregate
-```csharp
-var order = await _db.Orders
-    .Include(o => o.Lines)  // Load all parts
-    .FirstOrDefaultAsync(o => o.Id == orderId);
+Always load and save the full aggregate. The persistence mechanism (ORM, document store, etc.) must load all child entities in a single operation and persist the entire graph transactionally.
+
+```
+// Load full aggregate
+order = repository.Get(orderId)   // Loads order + all lines in one operation
+
+// Save full aggregate
+repository.Save(order)            // Persists order + all lines transactionally
 ```
 
-### Save Full Aggregate
-```csharp
-_db.Orders.Update(order);  // Updates all parts transactionally
-await _db.SaveChangesAsync();
-```
+The DB bridge skill owns the specific persistence implementation.
 
 ## Large Collections Problem
 
@@ -82,21 +77,21 @@ If an aggregate root has thousands of child entities, loading the full aggregate
 
 **Solution**: Re-examine the aggregate boundary. Large collections often indicate the child should be a separate aggregate referenced by ID.
 
-### ❌ Problem
-```csharp
+### Problem
+```
 // Customer with 10,000 orders — loading all orders is impractical
 Customer (root)
-  └── Orders (10,000)  // ❌ Too large
+  └── Orders (10,000)       // ❌ Too large
 ```
 
-### ✅ Solution
-```csharp
+### Solution
+```
 // Customer and Order are separate aggregates
 Customer (root)
   └── CustomerId
 
 Order (root)
-  └── CustomerId  // Reference to customer
+  └── CustomerId             // Reference to customer
 ```
 
 Query orders by customer ID when needed, not by loading the customer aggregate.

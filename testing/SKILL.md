@@ -1,6 +1,6 @@
 ---
 name: testing
-description: Testing strategy and coverage requirements — component-specific testing approaches, test types, coverage targets, and test organization. Use when planning test strategy, determining what types of tests to write, setting coverage goals, organizing test projects, or deciding between unit vs integration tests. Platform, language, and architecture agnostic — does not assume any specific architectural pattern or layering model. Composes with platform-specific testing bridges (e.g., dotnet-testing) for implementation details.
+description: Testing strategy and coverage requirements — component-specific testing approaches, test types, coverage targets, and test organization. Use when planning test strategy, determining what types of tests to write, setting coverage goals, organizing test projects, or deciding between unit vs integration tests. Platform, language, and architecture agnostic — does not assume any specific architectural pattern or layering model. Composes with platform-specific testing bridges for implementation details.
 ---
 
 ## Coverage Requirements
@@ -180,32 +180,23 @@ GetOrder_WithoutAuth_Returns401Unauthorized
 
 ## Test Organization
 
-### Separate Unit and Integration Tests
+Keep all tests for a deployable unit in a **single test project/module**. Separate unit, integration, and end-to-end tests by folder and namespace — not by project. Separate projects per test type create churn (duplicated references, build config, fixtures) without solving anything that test filters (namespace, tag, or trait) don't solve more cheaply.
 
-**Option 1: Separate projects**
 ```
 tests/
-├── YourApp.Core.Tests/                ← Unit tests (business logic)
-├── YourApp.Services.Tests/            ← Unit tests (rule services)
-├── YourApp.Application.IntegrationTests/ ← Integration tests
-└── YourApp.DataAccess.IntegrationTests/
+└── Tests/
+    ├── Unit/
+    │   ├── BusinessLogic/
+    │   └── Orchestration/
+    ├── Integration/
+    │   ├── DataAccess/
+    │   └── Api/
+    └── EndToEnd/
 ```
 
-**Option 2: Separate namespaces/folders within project**
-```
-YourApp.Tests/
-├── Unit/
-│   ├── Core/
-│   └── Services/
-└── Integration/
-    ├── Application/
-    └── DataAccess/
-```
+Folder names should mirror your production project structure. The architecture bridge specifies which production projects exist and therefore which subfolders appear under each test type.
 
-Benefits of separation:
-- Run fast unit tests frequently during development
-- Run slower integration tests before commit/push
-- Different CI pipeline stages
+To run a subset (fast unit tests inner-loop, integration in CI, etc.), filter by the namespace or a tag using your test runner's native filter syntax. The platform-specific testing bridge shows the exact command.
 
 ---
 
@@ -237,7 +228,7 @@ Keep each section clear and separated. One logical assertion per test (but multi
 
 ## Test Data Builders
 
-Use builder pattern for complex test data. Never construct domain objects inline.
+Use the builder pattern for complex test data. Never construct domain objects inline.
 
 **Benefits**:
 - Tests are less brittle (only specify what matters for that test)
@@ -246,21 +237,25 @@ Use builder pattern for complex test data. Never construct domain objects inline
 - Easy to create variations
 
 ```
-// Bad — brittle, unclear intent
-var order = new Order(
-    new OrderId(Guid.NewGuid()),
-    new CustomerId(Guid.NewGuid()),
-    OrderStatus.Pending,
-    DateTime.UtcNow,
-    new List<OrderLine> { /* ... */ }
-);
+# Bad — brittle, unclear intent
+order = Order(
+    id = newOrderId(),
+    customerId = newCustomerId(),
+    status = PENDING,
+    createdAt = now(),
+    lines = [...]
+)
 
-// Good — clear intent, flexible
-var order = OrderBuilder
-    .APendingOrder()
-    .WithCustomer(customerId)
-    .Build();
+# Good — clear intent, flexible
+order = OrderBuilder
+    .aPendingOrder()
+    .withCustomer(customerId)
+    .build()
 ```
+
+Language-specific idioms (`new`, constructor syntax, method-chaining style)
+belong in the platform-specific testing bridge. The principle — explicit named
+builder methods replacing positional constructor calls — is universal.
 
 ---
 
@@ -274,9 +269,15 @@ var order = OrderBuilder
 
 ---
 
-**Platform-Specific Implementation**: See platform testing bridges for specific tools, frameworks, and patterns:
-- .NET: `dotnet-testing` bridge
-- Node.js: `nodejs-testing` bridge (when available)
-- Python: `python-testing` bridge (when available)
+**Platform-Specific Implementation**: This skill stops at strategy. The
+concrete test framework, assertion library, mocking library, container helpers,
+and naming/builder idioms live in a platform-specific bridge. Load the bridge
+alongside this skill.
+
+| Stack | Bridge skill |
+|---|---|
+| .NET | [`dotnet-testing`](../dotnet-testing/SKILL.md) (xUnit, Moq, FluentAssertions, Testcontainers) |
+| Node.js | `nodejs-testing` (when available) |
+| Python | `python-testing` (when available) |
 
 See [references/TEST-DOUBLES.md](references/TEST-DOUBLES.md) for mocks, stubs, fakes, and spies, and [references/TDD.md](references/TDD.md) for test-driven development workflow.

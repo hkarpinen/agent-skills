@@ -31,7 +31,7 @@ Volatility profile = combination of:
 
 Different volatility → Separate aggregates.
 
-```csharp
+```
 // ✅ Correct
 Customer (aggregate root)
   └── Profile, Address
@@ -60,7 +60,7 @@ Order total must always equal sum of line totals → Transactional consistency r
 
 Same volatility + shared invariant → Same aggregate.
 
-```csharp
+```
 // ✅ Correct
 Order (aggregate root)
   └── OrderLines (in same aggregate)
@@ -81,7 +81,7 @@ Order (aggregate root)
 
 Different volatility → Separate aggregates.
 
-```csharp
+```
 // ✅ Correct
 Product (aggregate root)
   └── Name, Description, Price
@@ -99,7 +99,7 @@ Handle stock reservation via eventual consistency and domain events, not transac
 
 If an aggregate root references thousands of child entities, volatility analysis reveals the issue:
 
-```csharp
+```
 // ❌ Problem
 Customer (aggregate root)
   └── Orders (10,000 orders)
@@ -109,7 +109,7 @@ Customer (aggregate root)
 
 **Solution**: Separate by volatility.
 
-```csharp
+```
 // ✅ Correct
 Customer (aggregate root)
   └── Profile
@@ -144,7 +144,7 @@ Query orders by customer ID when needed, not by loading the entire customer aggr
 
 Don't size aggregates based on entity relationships alone.
 
-```csharp
+```
 // ❌ Wrong — Based on ER diagram, ignoring volatility
 Customer
   ├── Orders
