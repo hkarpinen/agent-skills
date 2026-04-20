@@ -135,7 +135,7 @@ Rules:
 
 ## Running EF Core Migrations in Containers
 
-`dotnet-webapi` forbids applying migrations at application startup: a crashing
+Never apply migrations at application startup: a crashing
 replica that auto-migrates is a destructive operation disguised as a health
 issue. The container image therefore must not run `dotnet ef database update`
 from `Program.cs`. Pick one of the following strategies instead:
@@ -212,8 +212,7 @@ services:
 
   db:
     # Image, environment, healthcheck, and volumes depend on your database.
-    # The DB bridge skill (e.g. dotnet-efcore-postgres) specifies the
-    # database-specific Compose service definition.
+    # Use the appropriate database image and healthcheck for your provider.
     image: <database-image>
     env_file:
       - .env

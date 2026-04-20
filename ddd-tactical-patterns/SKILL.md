@@ -190,7 +190,7 @@ interface OrderRepository
     DeleteAsync(order: Order) -> void
 ```
 
-The implementation lives in the infrastructure layer and depends on the persistence technology. The DB bridge skill owns the implementation.
+The implementation lives in the infrastructure layer and depends on the persistence technology.
 
 ---
 
@@ -216,16 +216,76 @@ class Order
 
 ---
 
-## Companion Skills
+## Denormalized Read Models
 
-| When you need | Skill |
-|---|---|
-| Map these patterns to a specific architecture methodology | The architecture bridge (e.g. `ddd-idesign-bridge`) |
-| Implement repositories with a specific ORM/database | The DB bridge (e.g. `dotnet-efcore-postgres`) |
-| Bounded context boundaries for multi-app systems | `ddd-strategic-patterns` |
+Sometimes a query needs data that is expensive to compute from the canonical aggregates (e.g. a vote count, comment count, or hot-ranking score). Instead of computing on every read, maintain a **denormalized read model** — a pre-computed projection kept in sync with the source aggregates.
+
+### Update Strategies
+
+| Strategy | Consistency | When to use |
+|---|---|---|
+| **Synchronous in transaction** | Strong | The read model is in the same database and transaction as the write. Simple, no eventual consistency. |
+| **Domain event → async projection** | Eventual | The read model is updated by a consumer listening to domain events. Decoupled, but the read model lags behind writes. |
+| **Scheduled recalculation** | Periodic | A background job recalculates the read model on a schedule (e.g. hourly). For non-time-critical data. |
+
+### Examples
+
+```
+// Thread aggregate stores canonical data
+class Thread
+    Id, Title, Body, AuthorId, CreatedAt
+
+// Denormalized fields maintained alongside the aggregate
+    Score: int           // sum of votes — updated when VoteCast event processed
+    CommentCount: int    // count of comments — incremented when CommentAdded processed
+    HotScore: float      // ranking score — recalculated after score or comment count changes
+```
+
+Rules:
+- The denormalized field lives on the aggregate or a co-located read table — not in a separate bounded context.
+- Document which events or operations trigger an update to each denormalized field.
+- Accept eventual consistency for async projections. The UI can show slightly stale counts.
+- For synchronous updates, update the read model in the same transaction as the write. If the write succeeds but the read model update fails, both roll back.
+- Never use a denormalized field as a source of truth for business decisions. It is a performance optimization for reads only.
+
+---
+
+## Soft Delete as a Domain Pattern
+
+Soft delete is not just a database column — it has domain semantics. An aggregate that supports soft delete transitions to a "deleted" state but remains in storage for audit, recovery, or referential integrity.
+
+```
+class Thread
+    IsDeleted: bool
+    DeletedAt: datetime?
+    DeletedBy: UserId?
+
+    Delete(deletedBy: UserId)
+        if IsDeleted
+            throw "Thread is already deleted."
+        IsDeleted = true
+        DeletedAt = utcNow()
+        DeletedBy = deletedBy
+        events.Add(ThreadDeleted(Id, deletedBy, DeletedAt))
+
+    Restore(restoredBy: UserId)
+        if not IsDeleted
+            throw "Thread is not deleted."
+        IsDeleted = false
+        DeletedAt = null
+        DeletedBy = null
+        events.Add(ThreadRestored(Id, restoredBy, utcNow()))
+```
+
+Rules:
+- Soft delete is a **state transition**, not a data access concern. Model it as a method on the aggregate root that raises a domain event.
+- Track **who** deleted the entity (`DeletedBy`) — this distinguishes author self-deletion from moderator deletion.
+- Repositories must **filter soft-deleted aggregates by default**. Provide an explicit `IncludeDeleted` option for admin/moderation queries.
+- Cascading soft deletes (e.g. deleting a thread soft-deletes its comments) are orchestrated in the application layer, not by the database. Each aggregate manages its own `IsDeleted` flag.
+- Periodically hard-delete ancient soft-deleted records via a scheduled job.
 
 **Invariant = Aggregate Boundary**: If a rule must be enforced transactionally, all objects involved in that rule belong to the same aggregate.
 
 ---
 
-See [references/IDENTITY-STRATEGIES.md](references/IDENTITY-STRATEGIES.md) for identity generation patterns and [references/AGGREGATE-DESIGN.md](references/AGGREGATE-DESIGN.md) for deeper guidance on sizing and designing aggregates.
+See [references/IDENTITY-STRATEGIES.md](references/IDENTITY-STRATEGIES.md) for identity generation patterns, [references/AGGREGATE-DESIGN.md](references/AGGREGATE-DESIGN.md) for deeper guidance on sizing and designing aggregates, and [references/SCORING-ALGORITHMS.md](references/SCORING-ALGORITHMS.md) for ranking and scoring patterns (hot ranking, Wilson score).

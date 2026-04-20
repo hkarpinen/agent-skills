@@ -1,19 +1,11 @@
 ---
 name: ddd-strategic-patterns
-description: Domain-Driven Design strategic patterns — Bounded Contexts, Context Maps, integration patterns, and shared infrastructure conventions for multi-app systems. Use when splitting a system into multiple applications or services, deciding what belongs in which bounded context, designing cross-context integration (events, APIs, shared database schemas), or planning a multi-app architecture. Language, stack, and architecture agnostic. Does NOT cover tactical patterns within a context (see `ddd-tactical-patterns`) or single-app layer decomposition (see `righting-software`). Database and backend skills supply the technology-specific realization of these principles.
+description: Domain-Driven Design strategic patterns — Bounded Contexts, Context Maps, integration patterns, and shared infrastructure conventions for multi-app systems. Use when splitting a system into multiple applications or services, deciding what belongs in which bounded context, designing cross-context integration (events, APIs, shared database schemas), or planning a multi-app architecture. Language, stack, and architecture agnostic. Does NOT cover tactical patterns within a single context or single-app layer decomposition.
 ---
 
 ## Scope
 
-This skill owns **system-level boundary decisions** — how multiple bounded contexts relate, integrate, and share infrastructure without coupling. It sits above `righting-software` (which decomposes *within* a single context) and above `ddd-tactical-patterns` (which models *within* a single domain).
-
-| This skill owns | Other skills own |
-|---|---|
-| Identifying bounded context boundaries | Volatility decomposition within a context (`righting-software`) |
-| Context Map relationships | Aggregate/entity/value-object modeling (`ddd-tactical-patterns`) |
-| Cross-context integration patterns | Layer model and call direction within a context (`righting-software`) |
-| Shared-database schema isolation principles | Schema naming, types, indexes, enforcement (database skill) |
-| Identity as an upstream context | Token issuance, middleware (backend/frontend skills) |
+This skill owns **system-level boundary decisions** — how multiple bounded contexts relate, integrate, and share infrastructure without coupling.
 
 ---
 
@@ -27,7 +19,7 @@ Apply these heuristics in order:
 
 1. **Different ubiquitous language** — If two teams (or two features) use the same word to mean different things, that's a boundary. "User" in Identity means credentials + roles. "User" in Forum means display name + avatar. They are different models.
 
-2. **Different volatility profiles** — If two areas change at different rates, for different reasons, or by different stakeholders, they belong in separate contexts. This aligns with `righting-software`'s volatility principle — applied at the system level.
+2. **Different volatility profiles** — If two areas change at different rates, for different reasons, or by different stakeholders, they belong in separate contexts. This aligns with IDesign's volatility principle — applied at the system level.
 
 3. **Different business capabilities** — Authentication, billing, discussion, household management are distinct capabilities. Each gets its own context.
 
@@ -182,7 +174,7 @@ Bills subscribes:   → inserts into bills.members (userId, displayName)
 - Multiple downstream contexts need to react to the same event
 - You want to decouple deployment and availability
 
-**Event rules** (extend `ddd-tactical-patterns` to the system level):
+**Event rules** (tactical DDD patterns applied at the system level):
 - Events are immutable facts — named in past tense
 - Events carry IDs and relevant data — never the full entity
 - The publisher defines the event schema (Published Language)

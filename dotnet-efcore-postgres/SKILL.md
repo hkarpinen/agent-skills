@@ -22,7 +22,7 @@ Add to the test project:
 
 ## Provider Registration
 
-This bridge owns the `dbOptions` action supplied to `AddDbContext<AppDbContext>`. The **composition root** and the method that ultimately calls `AddDbContext` are defined by your architecture bridge (e.g. `dotnet-idesign`).
+This bridge owns the `dbOptions` action supplied to `AddDbContext<AppDbContext>`. The **composition root** and the method that ultimately calls `AddDbContext` are defined by your architecture.
 
 ```csharp
 // In your composition root (architecture bridge specifies which project and method name).
@@ -55,7 +55,7 @@ Action<DbContextOptionsBuilder> dbOptions = options => options
 
 ## Entity Configuration
 
-Follow `db-postgres` conventions in `IEntityTypeConfiguration<T>` implementations.
+Follow PostgreSQL naming conventions (snake_case, plural tables, named constraints) in `IEntityTypeConfiguration<T>` implementations.
 
 ```csharp
 public class OrderEntityConfiguration : IEntityTypeConfiguration<OrderEntity>
@@ -133,7 +133,7 @@ Include `Include Error Detail=true` in development only.
 
 ## Multi-Context Database Configuration
 
-When multiple bounded contexts share a PostgreSQL server, each context's `DbContext` targets its own isolated unit. The isolation strategy is decided by `ddd-strategic-patterns` — this bridge implements it.
+When multiple bounded contexts share a PostgreSQL server, each context's `DbContext` targets its own isolated unit.
 
 ### Database-per-Context (Recommended)
 
@@ -161,7 +161,7 @@ Host=db;Port=5432;Database=identity;Username=app;Password=...
 Host=db;Port=5432;Database=forum;Username=app;Password=...
 ```
 
-Use an init script to create the databases on first run (see `docker` skill for the pattern).
+Use an init script to create the databases on first run.
 
 ### Schema-per-Context (Alternative)
 
@@ -187,7 +187,7 @@ Rules:
 
 ### Compose Migration Services
 
-When using `dotnet-webapi-docker`'s migration-as-a-service pattern with multiple contexts, define one migration service per context:
+When using a migration-as-a-service pattern with multiple contexts, define one migration service per context:
 
 ```yaml
 services:

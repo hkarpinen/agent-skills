@@ -1,26 +1,11 @@
 ---
 name: dotnet-webapi
-description: Architecture-agnostic ASP.NET Core Web API stack — package selection, Program.cs wiring, DI primitives, controllers, FluentValidation, EF Core registration, ASP.NET Core Identity + JWT, Serilog, OpenTelemetry, and HttpClient resilience. Use when building or scaffolding a .NET Web API. Does NOT define solution/project structure, layer model, or where orchestrators live — those are owned by an architecture bridge (e.g. `dotnet-idesign`). Does NOT supply the DB provider — compose with a DB bridge (e.g. `dotnet-efcore-postgres`). Does NOT cover containerization — compose with `dotnet-webapi-docker`.
+description: Architecture-agnostic ASP.NET Core Web API stack — package selection, Program.cs wiring, DI primitives, controllers, FluentValidation, EF Core registration, ASP.NET Core Identity + JWT, Serilog, OpenTelemetry, HttpClient resilience, rate limiting, and health checks. Use when building or scaffolding a .NET Web API. Does NOT define solution/project structure, layer model, or where orchestrators live. Does NOT supply the DB provider. Does NOT cover containerization.
 ---
 
-## Composability
-
-This skill covers ASP.NET Core framework concerns only — the things that are
-true of any .NET Web API regardless of how you organize it internally. It is
-deliberately architecture-agnostic:
-
-| Concern | Owned by |
-|---|---|
-| Solution / project structure, layer names, ServiceExtensions composition chain, DI lifetimes per role | An architecture bridge (e.g. `dotnet-idesign`) |
-| Orchestrator/use-case naming conventions (Manager vs UseCase vs Handler vs Service) | An architecture bridge |
-| DB provider, DbContext definition, entity configuration, migrations on the provider | A DB bridge (e.g. `dotnet-efcore-postgres`) |
-| Containerization | `dotnet-webapi-docker` |
-| Test framework tooling | `dotnet-testing` |
-
-Load this skill alongside one architecture bridge and one DB bridge. Swap
-either of those without touching this skill.
-
 ---
+
+## Core Package Stack
 
 ## Core Package Stack
 
@@ -98,17 +83,19 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseSerilogRequestLogging();
+app.UseCors("AllowFrontend");      // CORS before rate limiter and auth
+app.UseRateLimiter();              // rate limiter before auth
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHealthChecks("/healthz");
 app.Run();
 ```
 
 Rules:
-- Middleware order is significant and non-obvious. Keep it:
-  exception-handler → request-logging → auth-n → auth-z → endpoints.
-- Do not apply EF Core migrations from `Program.cs` — the DB bridge and
-  `dotnet-webapi-docker` specify the correct migration strategy.
+- Middleware order is significant and non-obvious. The canonical order is:
+  exception-handler → request-logging → CORS → rate-limiter → auth-n → auth-z → endpoints → health checks.
+- Do not apply EF Core migrations from `Program.cs`. Apply migrations via CI/CD scripts or a one-shot container.
 
 ---
 
@@ -200,8 +187,8 @@ conventions, and migration policy are owned by the DB bridge.
 services.AddDbContext<AppDbContext>(dbOptions);
 ```
 
-`dbOptions` is an `Action<DbContextOptionsBuilder>` supplied by the DB bridge
-(e.g. `dotnet-efcore-postgres` configures Npgsql + `UseSnakeCaseNamingConvention`).
+`dbOptions` is an `Action<DbContextOptionsBuilder>` supplied by the data-access
+provider configuration (e.g. Npgsql + `UseSnakeCaseNamingConvention` for PostgreSQL).
 
 ---
 
@@ -242,35 +229,6 @@ services.AddAuthentication(options =>
     };
 });
 ```
-
-### Identity + DDD Reconciliation
-
-When using ASP.NET Core Identity alongside DDD patterns (e.g., in an Identity bounded context modeled with aggregates), tension arises: Identity owns the user table schema (`AspNetUsers`, `AspNetRoles`), while DDD expects the domain model to own the schema.
-
-**Recommended approach — Extend `IdentityUser`:**
-
-```csharp
-// Domain layer — AppUser extends IdentityUser to add domain fields
-public class AppUser : IdentityUser
-{
-    public string DisplayName { get; private set; } = string.Empty;
-    public DateTimeOffset CreatedAt { get; private set; }
-    public DateTimeOffset? DeletedAt { get; private set; }
-
-    // Domain behavior lives here
-    public void UpdateProfile(string displayName)
-    {
-        DisplayName = displayName;
-    }
-}
-```
-
-Rules:
-- `AppUser` lives in the Domain layer. It extends `IdentityUser` to add domain-specific properties and behavior.
-- ASP.NET Core Identity's `UserManager<AppUser>` handles password hashing, lockout, email confirmation, and token generation. Do not reimplement these — they are infrastructure concerns that Identity handles correctly.
-- Domain events can still be raised from `AppUser` methods. The Manager collects and dispatches them after `UserManager` persists.
-- The `DbContext` inherits from `IdentityDbContext<AppUser>` instead of plain `DbContext`. Entity configurations can coexist with Identity's tables.
-- Do **not** create a parallel `User` aggregate that duplicates Identity's data. The `AppUser` extending `IdentityUser` **is** the aggregate root for the Identity context.
 
 ---
 
@@ -331,9 +289,7 @@ Rules:
 
 ## Pagination
 
-Use cursor-based (keyset) pagination for list endpoints. Offset-based pagination
-degrades as offset grows and produces inconsistent results when data changes
-between pages.
+Use cursor-based (keyset) pagination for list endpoints. This section covers the ASP.NET Core request/response shape.
 
 ### Request/Response Shape
 
@@ -364,45 +320,17 @@ Rules:
 - Clamp `limit` to a server-defined maximum (e.g. 100). Never allow unbounded page sizes.
 - Return `NextCursor` as `null` when there are no more pages.
 - The cursor is an opaque value to the client — do not document its internal structure.
-- The query layer (owned by architecture bridge) translates the cursor to a `WHERE id > @cursor` clause.
+- The query layer (owned by architecture bridge) translates the cursor to a `WHERE` clause.
 
 ---
 
-## Policy-Based Authorization
+## Authorization
 
-Use ASP.NET Core's policy-based authorization for role and claim checks. Avoid
-inline role strings on every endpoint.
+This skill owns only the middleware registration order — see **Program.cs Shape**
+above: `app.UseAuthentication()` then `app.UseAuthorization()`.
 
-### Define Policies
-
-```csharp
-services.AddAuthorization(options =>
-{
-    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
-    options.AddPolicy("ModeratorOrAdmin", policy =>
-        policy.RequireRole("Admin", "Moderator"));
-});
-```
-
-### Apply to Controllers or Endpoints
-
-```csharp
-[Authorize(Policy = "AdminOnly")]
-[HttpDelete("{id:guid}")]
-public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
-{
-    await _handler.DeleteAsync(id, ct);
-    return NoContent();
-}
-```
-
-Rules:
-- Define all policies in a single registration block, close to the Identity registration.
-- Prefer `[Authorize(Policy = "...")]` over `[Authorize(Roles = "...")]`. Policies are
-  testable and composable; raw role strings are scattered and fragile.
-- For resource-based authorization (e.g. "user can only edit their own posts"), implement
-  `IAuthorizationHandler` with a custom requirement.
-- The architecture bridge decides where the policy registration physically lives (which `ServiceExtensions`).
+Authorization policy definitions, `[Authorize]` attribute patterns, resource-based
+authorization handlers, and claims mapping are separate concerns from the API framework.
 
 ---
 
@@ -431,13 +359,7 @@ builder.Services.AddCors(options =>
 });
 ```
 
-Apply the policy in middleware — before `UseAuthentication`:
-
-```csharp
-app.UseCors("AllowFrontend");
-app.UseAuthentication();
-app.UseAuthorization();
-```
+Apply the policy in middleware — see the canonical order in **Program.cs Shape** above (`app.UseCors("AllowFrontend")` before rate limiter and auth).
 
 Rules:
 - Never use `.AllowAnyOrigin()` with `.AllowCredentials()` — this is forbidden by the CORS spec and will produce a browser error.
@@ -445,6 +367,103 @@ Rules:
 - When behind a reverse proxy, the browser's `Origin` header contains the proxy's URL (e.g., `http://localhost`), not the backend's internal URL. Configure accordingly.
 - In development, allow `http://localhost:3000` (Next.js dev server). In production, allow only the proxy's public URL.
 - Server-to-server calls (Next.js Server Components, Server Actions) do not send `Origin` headers and are not affected by CORS.
+
+---
+
+## Rate Limiting
+
+Use ASP.NET Core's built-in rate limiter middleware to protect public endpoints from abuse (spam registration, vote flooding, rapid-fire post creation).
+
+### Registration
+
+```csharp
+builder.Services.AddRateLimiter(options =>
+{
+    // Global fallback — applies to all endpoints without a specific policy
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // Fixed window — e.g., 100 requests per minute per user
+    options.AddFixedWindowLimiter("standard", opt =>
+    {
+        opt.PermitLimit = 100;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueLimit = 0;
+    });
+
+    // Strict — for mutation endpoints (post creation, voting)
+    options.AddFixedWindowLimiter("strict", opt =>
+    {
+        opt.PermitLimit = 10;
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.QueueLimit = 0;
+    });
+
+    // Auth endpoints — prevent brute force
+    options.AddSlidingWindowLimiter("auth", opt =>
+    {
+        opt.PermitLimit = 5;
+        opt.Window = TimeSpan.FromMinutes(5);
+        opt.SegmentsPerWindow = 5;
+        opt.QueueLimit = 0;
+    });
+});
+```
+
+Middleware placement — see the canonical order in **Program.cs Shape** above (`app.UseRateLimiter()` after CORS, before auth).
+
+### Applying to Endpoints
+
+```csharp
+[EnableRateLimiting("strict")]
+[HttpPost]
+public async Task<ActionResult<ThreadResponse>> CreateThread(...)
+
+[EnableRateLimiting("auth")]
+[HttpPost("login")]
+public async Task<ActionResult<AuthResponse>> Login(...)
+```
+
+### Partitioning by User
+
+By default, rate limits apply globally. To partition by authenticated user (or by IP for anonymous users):
+
+```csharp
+options.AddFixedWindowLimiter("strict", opt =>
+{
+    opt.PermitLimit = 10;
+    opt.Window = TimeSpan.FromMinutes(1);
+    opt.QueueLimit = 0;
+});
+
+// Override the partition key globally
+options.OnRejected = async (context, ct) =>
+{
+    context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+    await context.HttpContext.Response.WriteAsync("Too many requests. Try again later.", ct);
+};
+```
+
+For per-user partitioning, use `AddPolicy` with a custom `IRateLimiterPolicy<string>`:
+
+```csharp
+options.AddPolicy("per-user-strict", httpContext =>
+{
+    var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+    return RateLimitPartition.GetFixedWindowLimiter(userId, _ => new FixedWindowRateLimiterOptions
+    {
+        PermitLimit = 10,
+        Window = TimeSpan.FromMinutes(1)
+    });
+});
+```
+
+Rules:
+- Always set `RejectionStatusCode` to `429`. The default is `503`, which is misleading.
+- Partition by authenticated user ID when available, IP address as fallback. Global (unpartitioned) limits protect only against total throughput overload, not per-user abuse.
+- Use `FixedWindowLimiter` for most endpoints. Use `SlidingWindowLimiter` for auth endpoints where burst tolerance matters.
+- Place rate limiter middleware **after** CORS and **before** authentication. Rate-limited requests should be rejected before doing auth work.
+- Do not rate-limit health check endpoints — they are called by infrastructure, not users.
+- Configure limits via `appsettings.json` or environment variables in production — do not hard-code.
 
 ---
 
@@ -464,8 +483,7 @@ app.MapHealthChecks("/healthz");
 
 Rules:
 - The health check endpoint must be unauthenticated — Docker and load balancers cannot pass JWTs.
-- Add a database check so the health endpoint verifies connectivity, not just that the process is running.
-- The DB bridge skill specifies which health check package to use for the database provider.
+- Add a database check so the health endpoint verifies connectivity, not just that the process is running. Use the health check package appropriate for your database provider.
 - Use `/healthz` as the path consistently across all services. Reference this path in Compose `healthcheck` and load balancer configuration.
 
 Docker Compose integration:

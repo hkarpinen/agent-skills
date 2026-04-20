@@ -1,6 +1,6 @@
 ---
 name: db-postgres
-description: PostgreSQL schema design conventions — how to translate domain models into PostgreSQL idioms. Use when designing or reviewing a PostgreSQL database schema, choosing data types, defining indexes, constraints, or schema separation. Stack and ORM agnostic — applies regardless of the application stack. Composes with a bridge skill that maps these conventions to a specific ORM.
+description: PostgreSQL schema design conventions — how to translate domain models into PostgreSQL idioms. Use when designing or reviewing a PostgreSQL database schema, choosing data types, defining indexes, constraints, schema separation, full-text search with tsvector/tsquery, or modeling hierarchical/tree-structured data (nested comments, categories). Stack and ORM agnostic — applies regardless of the application stack.
 ---
 
 ## Core Philosophy
@@ -70,7 +70,7 @@ this skill does not prescribe it. Pick one of:
 | `DEFAULT gen_random_uuid()` on the column (pgcrypto) | CRUD-shaped apps where the domain has no need for the ID before write |
 | Database sequence → application cast | Legacy integration where downstream systems consume sequential IDs |
 
-Your application stack's bridge skill specifies
+Your application stack specifies
 which option it uses and how to wire it. Do not mix strategies within one
 database.
 
@@ -154,19 +154,11 @@ CREATE INDEX ix_order_lines_product_id ON orders.order_lines (product_id);
 
 ---
 
-## Bridges to Application Stacks
+## Scope Boundary
 
 This skill stops at the schema. The mapping from application code to the schema
 above — ORM configuration, type conversion, UUID generation strategy, migration
-tooling, integration tests — lives in a stack-specific bridge:
-
-| Stack | Bridge skill |
-|---|---|
-| .NET (EF Core + Npgsql) | `dotnet-efcore-postgres` |
-
-When composing this skill with an application stack, load the corresponding
-bridge too. The bridge is authoritative on where the application-side
-conventions (e.g. snake_case naming, UUID generation) come from.
+tooling, integration tests — is a stack-specific concern outside this skill's scope.
 
 ---
 
@@ -256,6 +248,157 @@ UPDATE forum.threads SET deleted_at = now() WHERE id = :id AND deleted_at IS NUL
   in application code — PostgreSQL `ON DELETE CASCADE` does not fire for `UPDATE` statements.
 - Periodically hard-delete ancient soft-deleted rows (e.g. older than 1 year) via a scheduled job
   to prevent table bloat.
+
+---
+
+## Full-Text Search
+
+PostgreSQL has built-in full-text search via `tsvector` (indexed document representation) and `tsquery` (search query). Use it for searching user-generated content (posts, threads, comments) before reaching for an external search engine.
+
+### tsvector and tsquery
+
+```sql
+-- Add a generated tsvector column
+ALTER TABLE forum.threads ADD COLUMN search_vector tsvector
+    GENERATED ALWAYS AS (
+        setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+        setweight(to_tsvector('english', coalesce(body, '')), 'B')
+    ) STORED;
+
+-- Create a GIN index for fast lookup
+CREATE INDEX ix_threads_search ON forum.threads USING GIN (search_vector)
+    WHERE deleted_at IS NULL;
+
+-- Query
+SELECT id, title, ts_rank(search_vector, query) AS rank
+  FROM forum.threads, to_tsquery('english', 'rust & async') AS query
+ WHERE search_vector @@ query
+   AND deleted_at IS NULL
+ ORDER BY rank DESC
+ LIMIT 20;
+```
+
+### Weighted Search
+
+Use `setweight` to prioritize matches in different columns:
+
+| Weight | Priority | Example use |
+|---|---|---|
+| `'A'` | Highest | Title, name |
+| `'B'` | High | Body, description |
+| `'C'` | Medium | Tags, metadata |
+| `'D'` | Lowest | Comments, ancillary text |
+
+### Search Query Syntax
+
+| Input | `to_tsquery` form | Meaning |
+|---|---|---|
+| `rust async` | `'rust' & 'async'` | Both terms |
+| `rust OR async` | `'rust' \| 'async'` | Either term |
+| `rust -unsafe` | `'rust' & !'unsafe'` | Exclude term |
+| `deploy:*` | `'deploy':*` | Prefix match |
+
+For user-facing search, use `websearch_to_tsquery` which accepts natural language input:
+
+```sql
+SELECT id, title
+  FROM forum.threads, websearch_to_tsquery('english', 'rust async programming') AS query
+ WHERE search_vector @@ query AND deleted_at IS NULL
+ ORDER BY ts_rank(search_vector, query) DESC
+ LIMIT 20;
+```
+
+Rules:
+- Use a `GENERATED ALWAYS AS ... STORED` column for the `tsvector` — it stays in sync with the source columns automatically.
+- Always create a `GIN` index on the `tsvector` column. Without it, full-text search does a sequential scan.
+- Use `ts_rank` or `ts_rank_cd` for relevance ordering. Do not rely on insertion order.
+- Specify a text search configuration (`'english'`, `'simple'`, etc.) explicitly. The default depends on server locale and is not portable.
+- Combine with a partial index (`WHERE deleted_at IS NULL`) to exclude soft-deleted rows from search.
+- PostgreSQL full-text search is sufficient for most applications. Consider Elasticsearch only when you need fuzzy matching, typo tolerance, faceted search, or search across millions of documents with sub-100ms latency.
+
+---
+
+## Tree Structures (Hierarchical Data)
+
+Forums, comment threads, category trees, and org charts all require storing and querying tree-shaped data. PostgreSQL supports several patterns.
+
+### Adjacency List (Default)
+
+Each row holds a reference to its parent. Simplest model; use recursive CTEs to query subtrees.
+
+```sql
+CREATE TABLE forum.posts (
+    id              uuid        NOT NULL,
+    thread_id       uuid        NOT NULL,
+    parent_post_id  uuid,                    -- NULL = top-level reply to thread
+    body            text        NOT NULL,
+    created_at      timestamptz NOT NULL,
+    CONSTRAINT pk_posts PRIMARY KEY (id),
+    CONSTRAINT fk_posts_parent FOREIGN KEY (parent_post_id) REFERENCES forum.posts (id),
+    CONSTRAINT fk_posts_thread FOREIGN KEY (thread_id) REFERENCES forum.threads (id)
+);
+
+CREATE INDEX ix_posts_parent_post_id ON forum.posts (parent_post_id);
+CREATE INDEX ix_posts_thread_id ON forum.posts (thread_id);
+```
+
+### Recursive CTE — Load a Subtree
+
+```sql
+-- Load all replies for a thread as a nested tree (with depth)
+WITH RECURSIVE reply_tree AS (
+    -- Anchor: top-level posts (no parent)
+    SELECT id, parent_post_id, body, created_at, 0 AS depth
+      FROM forum.posts
+     WHERE thread_id = :thread_id
+       AND parent_post_id IS NULL
+       AND deleted_at IS NULL
+
+    UNION ALL
+
+    -- Recursive: children of the previous level
+    SELECT p.id, p.parent_post_id, p.body, p.created_at, rt.depth + 1
+      FROM forum.posts p
+      JOIN reply_tree rt ON p.parent_post_id = rt.id
+     WHERE p.deleted_at IS NULL
+)
+SELECT * FROM reply_tree
+ ORDER BY depth, created_at;
+```
+
+### Materialized Path (Alternative)
+
+Store the full ancestor path as a string. Faster reads for deep trees; more complex writes.
+
+```sql
+ALTER TABLE forum.posts ADD COLUMN path text NOT NULL DEFAULT '';
+-- path examples: '' (root), '00001', '00001.00003', '00001.00003.00007'
+
+-- Query all descendants of a post
+SELECT * FROM forum.posts
+ WHERE path LIKE '00001.00003.%'
+   AND deleted_at IS NULL
+ ORDER BY path;
+
+-- Index for prefix queries
+CREATE INDEX ix_posts_path ON forum.posts (path text_pattern_ops)
+    WHERE deleted_at IS NULL;
+```
+
+### Choosing a Pattern
+
+| Pattern | Read complexity | Write complexity | Best for |
+|---|---|---|---|
+| **Adjacency list** + recursive CTE | Moderate (CTE) | Simple (one INSERT) | Most applications; shallow-to-moderate trees (<10 levels) |
+| **Materialized path** | Fast (LIKE prefix) | Moderate (rebuild path on move) | Deep trees, frequent subtree queries, rare moves |
+| **Closure table** | Fast (JOIN) | Complex (maintain separate table) | Frequent ancestor/descendant queries, rare inserts |
+
+Rules:
+- **Default to adjacency list** with recursive CTEs. PostgreSQL handles recursive CTEs efficiently for trees under ~10 levels deep, which covers most forum/comment use cases.
+- Add a `depth` limit to recursive CTEs to prevent runaway queries on malformed data: `WHERE rt.depth < 20`.
+- For materialized path, use fixed-width segments (e.g., `00001.00003`) so lexicographic ordering matches tree ordering.
+- Index `parent_post_id` for adjacency list queries. Index `path` with `text_pattern_ops` for materialized path prefix queries.
+- Never use recursive CTEs without a depth limit in production — a cycle in the data (caused by a bug) will create an infinite loop.
 
 ---
 

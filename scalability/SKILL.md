@@ -1,6 +1,6 @@
 ---
 name: scalability
-description: Scalability patterns for multi-service systems — connection pooling, read replicas, caching strategy, CDN, horizontal scaling, and database partitioning. Use when planning for production scale, optimizing database connections, designing a caching layer, or configuring a CDN. Stack agnostic — applies to any backend, database, or frontend technology. Does NOT cover application architecture (see `righting-software`) or container orchestration (Kubernetes, ECS).
+description: Scalability patterns for multi-service systems — connection pooling, read replicas, caching strategy, CDN, horizontal scaling, and database partitioning. Use when planning for production scale, optimizing database connections, designing a caching layer, or configuring a CDN. Stack agnostic — applies to any backend, database, or frontend technology. Does NOT cover application architecture or container orchestration (Kubernetes, ECS).
 ---
 
 ## Scaling Axes
@@ -147,12 +147,4 @@ Rules:
 - Drop old partitions instead of deleting rows — `DROP TABLE` is instant; `DELETE` is slow and bloats.
 - Partition only tables that grow to millions of rows. Small tables do not benefit.
 
----
 
-## Companion Skills
-
-| When you need | Skill |
-|---|---|
-| PostgreSQL-specific schema design and indexing | `db-postgres` |
-| Docker Compose for infrastructure services (Redis, PgBouncer) | `docker` |
-| Multi-service architecture and bounded context design | `ddd-strategic-patterns` |

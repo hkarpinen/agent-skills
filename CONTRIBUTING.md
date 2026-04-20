@@ -86,9 +86,7 @@ A skill answers: *given a task in my domain, what should be done and how?*
 - Concrete conventions, rules, and decisions — not explanations of why options exist
 - Opinionated defaults — skills are not surveys of alternatives
 - Examples and code samples where they clarify a rule
-- Cross-references to composing skills where relevant (`**Composes with**`)
-
-A skill does NOT contain:
+- Concrete conventions, rules, and decisions — not explanations of why options exist
 - Content that belongs in another skill — never duplicate across skills
 - Generic explanations of concepts the agent already knows
 - Technology content in a technology-agnostic skill (and vice versa)
@@ -110,41 +108,6 @@ it belongs in exactly one and the other references it.
 When a bridge skill exists between a backend and a database skill, the bridge owns
 everything that requires knowledge of both sides. Neither the backend nor the database
 skill should contain anything that requires knowing the other.
-
----
-
-### Defining Pipelines
-
-A pipeline is a named, ordered sequence of skills. Order encodes dependency: skills
-earlier in the sequence produce context or artifacts that later skills depend on.
-
-**Notation** (used in `index.md` and `README.md`):
-
-| Symbol | Meaning |
-|---|---|
-| `→` | Sequential stage — apply left before right |
-| `+` | Parallel — skills within a stage are independent |
-
-Example:
-```
-`righting-software` → `dotnet-webapi` + `db-postgres` → `dotnet-efcore-postgres` → `dotnet-testing`
-```
-
-**Stage rules:**
-1. `righting-software` is always stage 1 for any system-building or refactor pipeline — it produces the domain model and volatility decomposition that all other skills consume.
-2. Backend and database skills are independent of each other (`+`) but both depend on the architecture stage.
-3. Bridge skills are always after the backend and database skills they connect — they require both sides to be defined.
-4. Testing skills are always the final stage — they require the production structure to exist first.
-
-**Defining a new pipeline:**
-
-1. Name it by goal, not by tools (✅ "Build a .NET Web API with PostgreSQL" not ❌ "righting-software + dotnet-webapi pipeline").
-2. Add it to the **Common Pipelines** table in `index.md` using the `→` / `+` notation.
-3. Add the pipeline to the **Skill Composition** table in `README.md`.
-
-**When to create a new pipeline vs. extend an existing one:**
-- New pipeline: the goal is meaningfully distinct (different domain, different entry point).
-- Extend existing: the new skill is an additive step in an existing workflow (e.g. adding a new bridge skill to an existing backend + database pipeline).
 
 ---
 
@@ -177,10 +140,6 @@ Add a row to the appropriate table in `index.md`:
 | `dotnet-console` | `dotnet-console/SKILL.md` | Building a .NET console application... |
 ```
 
-If the new skill belongs in an existing pipeline, add it to the relevant pipeline row
-in the **Common Pipelines** table using `→` for ordered stages and `+` for parallel
-skills within a stage. See **Defining Pipelines** below for the notation rules.
-
 ### 3. Update the release workflow
 
 Add the new skill to `.github/workflows/release.yml`:
@@ -194,7 +153,6 @@ zip dist/dotnet-console.skill dotnet-console/SKILL.md
 Skill changes are reviewed like code changes. The PR description should state:
 - What the skill covers
 - What it explicitly does not cover
-- Which skills it composes with
 - Any existing skills it overlaps with and how the boundary is drawn
 
 ---
@@ -203,8 +161,6 @@ Skill changes are reviewed like code changes. The PR description should state:
 
 - Edit the skill file directly.
 - If the change affects `index.md` descriptions, update those too.
-- If the change affects how the skill composes with another, check the other skill
-  for any content that now needs updating.
 - Never change a skill's filename — consumers may have it pinned by path.
 
 ---
@@ -252,9 +208,10 @@ See `README.md` for preset commands that install common skill combinations.
 - [ ] Opens with `name`, `description` frontmatter
 - [ ] `SKILL.md` is fully readable in isolation (<500 lines)
 - [ ] Reference files (if any) are in `references/` and loaded on demand
-- [ ] Contains no content that belongs in a composing skill
-- [ ] Architecture/domain/database skills: no technology references in body; technology cross-refs only in `## Companion Skills` table at bottom
-- [ ] Bridge skills: reference only their bridged pair, not unrelated skills
-- [ ] Added to `index.md` table and pipeline rows
+- [ ] Contains no content that belongs in another skill
+- [ ] Architecture/domain/database skills: no technology references in body
+- [ ] Bridge skills: reference only their own concerns, not unrelated skills
+- [ ] No cross-skill references (`see \`other-skill\``, `Companion Skills` tables, `Composability` sections)
+- [ ] Added to `index.md` table
 - [ ] Added to `README.md` Available Skills list and relevant presets
 - [ ] PR opened with boundary description

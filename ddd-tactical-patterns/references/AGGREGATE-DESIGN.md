@@ -69,7 +69,7 @@ order = repository.Get(orderId)   // Loads order + all lines in one operation
 repository.Save(order)            // Persists order + all lines transactionally
 ```
 
-The DB bridge skill owns the specific persistence implementation.
+The persistence implementation lives in the infrastructure layer.
 
 ## Large Collections Problem
 

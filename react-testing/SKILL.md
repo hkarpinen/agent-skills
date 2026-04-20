@@ -1,6 +1,6 @@
 ---
 name: react-testing
-description: Testing conventions for React applications — Vitest setup, Testing Library patterns, MSW for API mocking, component testing strategies, and hook testing. Use when writing or reviewing tests for React components, hooks, or pages in a React SPA or Next.js application. Compose with `testing` for strategy and coverage targets. Applies to both `react-spa` (Vite) and `nextjs-app` (App Router) projects.
+description: Testing conventions for React applications — Vitest setup, Testing Library patterns, MSW for API mocking, component testing strategies, and hook testing. Use when writing or reviewing tests for React components, hooks, or pages in a React SPA or Next.js application.
 ---
 
 ## Test Stack
@@ -248,12 +248,4 @@ it("parses orders response correctly", async () => {
 
 For full integration testing of Server Components, use Playwright or Cypress end-to-end tests.
 
----
 
-## Companion Skills
-
-| When you need | Skill |
-|---|---|
-| Test strategy, coverage targets, test types | `testing` |
-| React SPA framework conventions | `react-spa` |
-| Next.js App Router conventions | `nextjs-app` |

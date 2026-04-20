@@ -3,20 +3,9 @@ name: react-spa
 description: React single-page application stack — Vite, TanStack Query, TanStack Router, Tailwind CSS, Radix UI, React Hook Form + Zod, and Axios. Use when building or scaffolding a React SPA, setting up routing, managing server state, creating forms with validation, styling components, or structuring a frontend project. Architecture agnostic — does not prescribe how the backend is organized. Does NOT cover SSR/SSG (Next.js) or native mobile (React Native).
 ---
 
-## Composability
-
-This skill covers React SPA framework concerns only — the things that are true
-of any React SPA regardless of the backend. It is deliberately backend-agnostic:
-
-| Concern | Owned by |
-|---|---|
-| API contract, authentication endpoints, JWT issuance | The backend skill |
-| Database schema, ORM wiring | The DB bridge skill |
-| Containerization of the SPA (nginx, static hosting) | A future `react-spa-docker` bridge |
-| Test strategy, coverage targets, test types | `testing` |
-| Frontend test tooling (Vitest, Testing Library) | `react-testing` (when available), or this skill's Testing section as interim |
-
 ---
+
+## Core Package Stack
 
 ## Core Package Stack
 
@@ -372,53 +361,3 @@ Rules:
   output.
 - Access via `import.meta.env.VITE_API_BASE_URL`.
 
----
-
-## Testing (Interim)
-
-Until a dedicated `react-testing` skill exists, this section covers the minimum
-viable setup. The `testing` skill owns strategy and coverage targets.
-
-```ts
-// vitest.config.ts
-import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
-
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: "jsdom",
-    globals: true,
-    setupFiles: ["./src/test/setup.ts"],
-    css: true,
-  },
-  resolve: {
-    alias: { "@": "/src" },
-  },
-});
-```
-
-```ts
-// src/test/setup.ts
-import "@testing-library/jest-dom/vitest";
-```
-
-```tsx
-// Example component test
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { describe, it, expect } from "vitest";
-
-describe("DiscountBadge", () => {
-  it("renders the discount percentage", () => {
-    render(<DiscountBadge percent={15} />);
-    expect(screen.getByText("15% off")).toBeInTheDocument();
-  });
-});
-```
-
-Rules:
-- Query by role or label, never by test ID unless no semantic query exists.
-- Use `userEvent` for interactions, not `fireEvent`.
-- Mock API calls at the Axios level with `vi.mock` or use MSW for integration
-  tests — never mock `useQuery` directly.

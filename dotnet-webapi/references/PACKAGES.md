@@ -1,8 +1,7 @@
 # Complete Package List
 
 Organized by **concern**, not by project. Which project each package lands in
-is an architecture decision — see the architecture bridge you loaded (e.g.
-`dotnet-idesign`).
+is an architecture decision.
 
 ## API Surface
 
@@ -28,7 +27,7 @@ is an architecture decision — see the architecture bridge you loaded (e.g.
 | `Microsoft.EntityFrameworkCore.Design` | Design-time tooling |
 
 > The **DB provider package** (e.g. `Npgsql.EntityFrameworkCore.PostgreSQL`,
-> `Microsoft.EntityFrameworkCore.SqlServer`) is supplied by the DB bridge skill.
+> `Microsoft.EntityFrameworkCore.SqlServer`) is a separate concern.
 > Do not add a provider package here.
 
 ## Identity and Authentication

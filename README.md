@@ -161,6 +161,13 @@ npx skills add hkarpinen/agent-skills --skill nextjs-app --skill testing
 ### Messaging
 - **messaging** — Asynchronous messaging patterns (outbox, event envelopes, idempotent consumers, dead-letter handling)
 
+### Notifications & Real-Time
+- **notifications** — In-app and email notification patterns (notification model, delivery channels, preferences, aggregation)
+- **realtime** — Real-time communication patterns (SSE, WebSockets, scaling persistent connections, reverse proxy config)
+
+### Media
+- **media-storage** — File upload and object storage patterns (presigned URLs, image processing, MinIO, CDN integration)
+
 ### Backend
 - **dotnet-webapi** — .NET Web API conventions (ASP.NET Core Controllers, DI patterns)
 - **dotnet-testing** — Bridge between testing strategy and .NET (xUnit, Moq, FluentAssertions, Testcontainers)
@@ -179,34 +186,13 @@ npx skills add hkarpinen/agent-skills --skill nextjs-app --skill testing
 - **dotnet-webapi-docker** — Bridge between .NET Web API and Docker (containerization patterns)
 - **dotnet-messaging** — Bridge between messaging patterns and .NET (MassTransit, outbox with EF Core)
 - **nextjs-docker** — Bridge between Next.js and Docker (standalone output, multi-stage build)
+- **dotnet-realtime** — Bridge between real-time patterns and .NET (SignalR hubs, IHubContext, Redis backplane)
 
 ### Infrastructure
 - **docker** — Docker and Docker Compose patterns (multi-stage builds, layer caching, security)
 - **reverse-proxy** — Reverse proxy patterns (Nginx, Traefik, path-based routing, TLS termination)
 - **scalability** — Scalability patterns (connection pooling, read replicas, caching, CDN, horizontal scaling)
-
----
-
-## Skill Composition
-
-Skills are designed to compose. Common combinations:
-
-| Goal | Skills |
-|---|---|
-| Volatility-based architecture | `righting-software` |
-| Domain modeling with DDD | `ddd-tactical-patterns` |
-| DDD + IDesign architecture | `righting-software` + `ddd-tactical-patterns` + `ddd-idesign-bridge` + `dotnet-idesign` |
-| Multi-context system design | `righting-software` + `ddd-strategic-patterns` |
-| Testing strategy (any platform) | `testing` |
-| .NET Web API + PostgreSQL | `righting-software` + `dotnet-webapi` + `db-postgres` + `dotnet-efcore-postgres` |
-| .NET testing | `testing` + `dotnet-testing` |
-| React SPA | `react-spa` + `testing` |
-| Next.js app | `nextjs-app` + `testing` |
-| Full-stack .NET + React + PostgreSQL | `righting-software` + `dotnet-webapi` + `db-postgres` + `dotnet-efcore-postgres` + `react-spa` + `testing` + `dotnet-testing` |
-| Full-stack .NET + Next.js + PostgreSQL | `righting-software` + `dotnet-webapi` + `db-postgres` + `dotnet-efcore-postgres` + `nextjs-app` + `testing` + `dotnet-testing` |
-| Multi-context .NET + Next.js + Messaging | `righting-software` + `ddd-strategic-patterns` + `dotnet-webapi` + `db-postgres` + `dotnet-efcore-postgres` + `messaging` + `dotnet-messaging` + `nextjs-app` + `testing` + `dotnet-testing` + `react-testing` |
-| Containerize .NET API | `dotnet-webapi` + `docker` + `dotnet-webapi-docker` |
-| Full .NET DDD project | `righting-software` + `ddd-tactical-patterns` + `ddd-idesign-bridge` + `dotnet-idesign` + `dotnet-webapi` + `db-postgres` + `dotnet-efcore-postgres` + `testing` + `dotnet-testing` |
+- **ci-cd** — CI/CD pipeline patterns with GitHub Actions (build/test/deploy stages, migration scripts, Docker image publishing, environment promotion)
 
 ---
 

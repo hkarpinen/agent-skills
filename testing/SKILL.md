@@ -1,6 +1,6 @@
 ---
 name: testing
-description: Testing strategy and coverage requirements — component-specific testing approaches, test types, coverage targets, and test organization. Use when planning test strategy, determining what types of tests to write, setting coverage goals, organizing test projects, or deciding between unit vs integration tests. Platform, language, and architecture agnostic — does not assume any specific architectural pattern or layering model. Composes with platform-specific testing bridges for implementation details.
+description: Testing strategy and coverage requirements — component-specific testing approaches, test types, coverage targets, and test organization. Use when planning test strategy, determining what types of tests to write, setting coverage goals, organizing test projects, or deciding between unit vs integration tests. Platform, language, and architecture agnostic — does not assume any specific architectural pattern or layering model.
 ---
 
 ## Coverage Requirements
@@ -268,16 +268,5 @@ builder methods replacing positional constructor calls — is universal.
 - **DTOs without logic**: Only test if they contain validation or mapping logic
 
 ---
-
-**Platform-Specific Implementation**: This skill stops at strategy. The
-concrete test framework, assertion library, mocking library, container helpers,
-and naming/builder idioms live in a platform-specific bridge. Load the bridge
-alongside this skill.
-
-| Stack | Bridge skill |
-|---|---|
-| .NET | [`dotnet-testing`](../dotnet-testing/SKILL.md) (xUnit, Moq, FluentAssertions, Testcontainers) |
-| Node.js | `nodejs-testing` (when available) |
-| Python | `python-testing` (when available) |
 
 See [references/TEST-DOUBLES.md](references/TEST-DOUBLES.md) for mocks, stubs, fakes, and spies, and [references/TDD.md](references/TDD.md) for test-driven development workflow.

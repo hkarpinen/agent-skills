@@ -2,10 +2,10 @@
 
 > **Scope**: ASP.NET Core framework details only.
 > `AppDbContext`, `IEntityTypeConfiguration<T>`, table/column naming, schema
-> separation, and any other provider-specific persistence mapping live in the
-> DB bridge skill (e.g. `dotnet-efcore-postgres`).
+> separation, and any other provider-specific persistence mapping are
+> infrastructure concerns outside this skill's scope.
 > `ServiceExtensions` naming, composition order, and which project registers
-> what live in the architecture bridge (e.g. `dotnet-idesign`).
+> what are architecture concerns outside this skill's scope.
 
 ---
 
@@ -98,8 +98,8 @@ the defaults fail to meet.
 
 ## Identity + JWT Registration Block
 
-This fragment goes inside whichever `Add*` extension your architecture bridge
-assigns to the Identity/auth concern (in `dotnet-idesign`: `AddInfrastructure`).
+This fragment goes inside whichever `Add*` extension your architecture
+assigns to the Identity/auth concern (e.g. `AddInfrastructure`).
 
 ```csharp
 services.AddIdentity<AppUser, IdentityRole>(options =>

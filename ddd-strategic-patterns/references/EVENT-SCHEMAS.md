@@ -2,8 +2,7 @@
 
 > **Scope**: Event payload structure, naming, versioning, and evolution rules for
 > domain events that cross bounded context boundaries. These conventions apply to
-> events published through the outbox (see `messaging` skill) and consumed by
-> other contexts.
+> events published through the outbox and consumed by other contexts.
 
 ---
 

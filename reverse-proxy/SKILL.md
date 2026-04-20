@@ -166,6 +166,37 @@ Rules:
 
 ---
 
+## WebSocket Support (Nginx)
+
+SignalR, Socket.IO, and other WebSocket-based real-time transports require Nginx to perform an HTTP upgrade. Standard `proxy_pass` does not forward WebSocket connections.
+
+```nginx
+# WebSocket-enabled location (e.g. SignalR hub)
+location /hub/ {
+    proxy_pass http://forum_api;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Prevent Nginx from closing idle WebSocket connections
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+}
+```
+
+Rules:
+- `proxy_http_version 1.1` is required — WebSocket upgrade only works with HTTP/1.1.
+- `proxy_set_header Upgrade $http_upgrade` and `Connection "upgrade"` are both required for the handshake. Missing either causes a silent fallback to long polling.
+- Set `proxy_read_timeout` and `proxy_send_timeout` to a high value (24h) for WebSocket connections. The default 60s timeout closes idle connections.
+- For Traefik, WebSocket support is automatic — no additional configuration needed. Traefik detects the `Upgrade` header and forwards it.
+- Route WebSocket paths (`/hub/*`) to the backend service that hosts the hub, not to the frontend.
+
+---
+
 ## Docker Compose Integration
 
 ```yaml
@@ -191,11 +222,4 @@ Rules:
 
 ---
 
-## Companion Skills
 
-| When you need | Skill |
-|---|---|
-| Docker Compose patterns and security hardening | `docker` |
-| Multi-service Compose orchestration | `docker` (Multi-Service Compose section) |
-| Backend containerization | The backend Docker bridge (e.g. `dotnet-webapi-docker`) |
-| Frontend containerization | `nextjs-docker` |

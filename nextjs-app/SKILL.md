@@ -1,24 +1,11 @@
 ---
 name: nextjs-app
-description: Next.js App Router stack — RSC-first rendering, Server Actions, Tailwind CSS, Radix UI, React Hook Form + Zod, and TanStack Query for interactive client state. Use when building or scaffolding a Next.js application with the App Router, implementing server components, creating API route handlers, managing server/client component boundaries, or structuring a full-stack Next.js project. Architecture and backend agnostic — auth tokens are issued by an external identity bounded context. Does NOT cover Pages Router, React Native, or SPA-only setups (see `react-spa` for Vite SPAs).
+description: Next.js App Router stack — RSC-first rendering, Server Actions, Tailwind CSS, Radix UI, React Hook Form + Zod, TanStack Query for interactive client state, and server-side markdown rendering with sanitization. Use when building or scaffolding a Next.js application with the App Router, implementing server components, creating API route handlers, managing server/client component boundaries, rendering user-generated markdown content, or structuring a full-stack Next.js project. Architecture and backend agnostic — auth tokens are issued by an external identity bounded context. Does NOT cover Pages Router, React Native, or SPA-only setups.
 ---
 
-## Composability
-
-This skill covers Next.js App Router concerns — the things that are true of any
-Next.js application regardless of the backend. It is an alternative to `react-spa`,
-not a companion — load one or the other.
-
-| Concern | Owned by |
-|---|---|
-| API contract, identity bounded context, JWT issuance | The backend skill |
-| Database schema, ORM wiring | The DB bridge skill |
-| Containerization of the Next.js app | A future `nextjs-docker` bridge |
-| Test strategy, coverage targets, test types | `testing` |
-| Frontend test tooling (Vitest, Testing Library) | `react-testing` (when available), or this skill's Testing section as interim |
-| SPA-only setups (Vite, TanStack Router) | `react-spa` |
-
 ---
+
+## Core Package Stack
 
 ## Core Package Stack
 
@@ -54,7 +41,7 @@ app/
 │   │   └── page.tsx        ← /orders/:orderId detail
 │   └── new/
 │       └── page.tsx        ← /orders/new form (Client Component)
-├── api/                    ← Route Handlers (webhooks, callbacks only)
+├── api/                    ← Route Handlers (webhooks, BFF proxy, callbacks)
 │   └── webhooks/
 │       └── route.ts
 lib/
@@ -76,8 +63,10 @@ Rules:
   in `components/`.
 - Server Components are the default. Add `"use client"` only for components
   that need browser APIs, event handlers, hooks, or TanStack Query.
-- Route Handlers (`app/api/`) are for webhooks and external callbacks only —
-  not for internal data fetching. Use Server Components or Server Actions instead.
+- Route Handlers (`app/api/`) are for webhooks, external callbacks, and BFF
+  proxy endpoints (e.g. token exchange, cookie-based auth proxy to backend APIs)
+  — not for internal data fetching. Use Server Components or Server Actions
+  for data that can be fetched at request time on the server.
 - Colocate route-specific components inside the route folder. Move to
   `components/` only when reused across routes.
 
@@ -96,6 +85,7 @@ Rules:
     "jsx": "preserve",
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
     "plugins": [{ "name": "next" }],
     "paths": { "@/*": ["./*"] }
   },
@@ -307,7 +297,7 @@ export function cn(...inputs: ClassValue[]) {
 
 ## Radix UI — Headless Components
 
-Same pattern as `react-spa` — Radix provides accessible, unstyled primitives.
+Radix provides accessible, unstyled primitives.
 Style them with Tailwind.
 
 Rules:
@@ -424,39 +414,98 @@ Rules:
 
 ---
 
-## Testing (Interim)
+## Markdown Rendering
 
-Until a dedicated `react-testing` skill exists, this covers the minimum
-viable setup. The `testing` skill owns strategy and coverage targets.
+For user-generated markdown content (forum posts, comments, articles), render on the server using `remark`/`rehype` and sanitize to prevent XSS.
+
+### Package Stack
+
+| Package | Purpose |
+|---|---|
+| `remark` | Parse markdown to AST |
+| `remark-parse` | Markdown parser plugin |
+| `remark-gfm` | GitHub Flavored Markdown (tables, strikethrough, task lists) |
+| `remark-rehype` | Convert remark AST to rehype (HTML) AST |
+| `rehype-stringify` | Serialize rehype AST to HTML string |
+| `rehype-sanitize` | Sanitize HTML output (XSS prevention) |
+| `rehype-highlight` | Syntax highlighting for code blocks (optional) |
+
+### Server-Side Rendering Function
 
 ```ts
-// vitest.config.ts
-import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
+// lib/markdown.ts
+import { unified } from "unified";
+import remarkParse from "remark-parse";
+import remarkGfm from "remark-gfm";
+import remarkRehype from "remark-rehype";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import rehypeStringify from "rehype-stringify";
+import rehypeHighlight from "rehype-highlight";
 
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: "jsdom",
-    globals: true,
-    setupFiles: ["./src/test/setup.ts"],
-    css: true,
-  },
-  resolve: {
-    alias: { "@": "." },
-  },
-});
+const processor = unified()
+  .use(remarkParse)
+  .use(remarkGfm)
+  .use(remarkRehype)
+  .use(rehypeSanitize, {
+    ...defaultSchema,
+    // Extend schema to allow code highlighting classes
+    attributes: {
+      ...defaultSchema.attributes,
+      code: [...(defaultSchema.attributes?.code ?? []), "className"],
+      span: [...(defaultSchema.attributes?.span ?? []), "className"],
+    },
+  })
+  .use(rehypeHighlight)
+  .use(rehypeStringify);
+
+export async function renderMarkdown(raw: string): Promise<string> {
+  const result = await processor.process(raw);
+  return String(result);
+}
 ```
 
-```ts
-// src/test/setup.ts
-import "@testing-library/jest-dom/vitest";
+### Usage in Server Components
+
+```tsx
+// app/threads/[threadId]/page.tsx — Server Component
+import { renderMarkdown } from "@/lib/markdown";
+
+export default async function ThreadPage({ params }: { params: Promise<{ threadId: string }> }) {
+  const { threadId } = await params;
+  const thread = await getThread(threadId);
+  const bodyHtml = await renderMarkdown(thread.body);
+
+  return (
+    <article>
+      <h1>{thread.title}</h1>
+      <div
+        className="prose prose-neutral dark:prose-invert max-w-none"
+        dangerouslySetInnerHTML={{ __html: bodyHtml }}
+      />
+    </article>
+  );
+}
+```
+
+### Tailwind Typography Plugin
+
+Use `@tailwindcss/typography` for styling rendered HTML with the `prose` class:
+
+```bash
+npm install @tailwindcss/typography
+```
+
+```css
+/* app/globals.css */
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
 ```
 
 Rules:
-- Test Client Components with Testing Library — render, query by role, assert.
-- Test Server Components by testing the underlying data-fetching functions
-  directly (unit test `getOrders()` etc.) and the component output as a unit.
-- Mock `fetch` at the global level or use MSW — never mock `useQuery` directly.
-- Use `userEvent` for interactions, not `fireEvent`.
-- Query by role or label, never by test ID unless no semantic query exists.
+- **Always sanitize** markdown output with `rehype-sanitize`. User-generated markdown is untrusted input — raw HTML injection is the most common XSS vector in markdown renderers.
+- Render markdown in **Server Components** only. The `unified` pipeline is async and should not run in the browser.
+- Store markdown as **raw text** in the database. Render to HTML on read, not on write. This allows changing the rendering pipeline without migrating stored content.
+- Use the `prose` class from `@tailwindcss/typography` to style rendered HTML. Do not write custom CSS for headings, lists, code blocks, etc.
+- For **Client Components** that need a markdown preview (e.g., live preview in a post editor), use a lightweight client-side library like `react-markdown` with `rehype-sanitize`. Do not ship the full `unified` pipeline to the browser.
+- Never use `dangerouslySetInnerHTML` without prior sanitization. The `rehype-sanitize` step is non-negotiable.
+

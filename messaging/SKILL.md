@@ -1,19 +1,11 @@
 ---
 name: messaging
-description: Asynchronous messaging patterns for cross-context integration — outbox pattern, event envelopes, idempotent consumers, at-least-once delivery, and dead-letter handling. Use when implementing domain event publishing between bounded contexts, designing event-driven integration, choosing a delivery guarantee, or setting up an outbox. Language, stack, and broker agnostic. Does NOT cover in-process domain event dispatching within a single context (see the architecture bridge) or event schema design (see `ddd-strategic-patterns`).
+description: Asynchronous messaging patterns for cross-context integration — outbox pattern, event envelopes, idempotent consumers, at-least-once delivery, and dead-letter handling. Use when implementing domain event publishing between bounded contexts, designing event-driven integration, choosing a delivery guarantee, or setting up an outbox. Language, stack, and broker agnostic. Does NOT cover in-process domain event dispatching within a single context or event schema design.
 ---
 
 ## Scope
 
-This skill owns the **transport-agnostic mechanics** of moving domain events between bounded contexts. It sits between `ddd-strategic-patterns` (which decides what events exist and which contexts publish/subscribe) and a broker-specific bridge (which wires a concrete transport).
-
-| This skill owns | Other skills own |
-|---|---|
-| Outbox pattern and guarantees | Which events to publish (`ddd-strategic-patterns`) |
-| Event envelope structure | Event payload schema and versioning (`ddd-strategic-patterns`) |
-| Idempotent consumer pattern | In-process domain event dispatch within one context (architecture bridge) |
-| Dead-letter and retry strategy | Broker-specific configuration (messaging bridge) |
-| Ordering and partitioning principles | Specific broker topology (messaging bridge) |
+This skill owns the **transport-agnostic mechanics** of moving domain events between bounded contexts.
 
 ---
 
@@ -49,6 +41,8 @@ Never publish an event directly from application code. The write to the database
 ```
 
 ### Outbox Table Schema
+
+SQL examples use PostgreSQL syntax (`jsonb`, `timestamptz`, partial indexes). Adapt types for other databases.
 
 ```sql
 CREATE TABLE <schema>.outbox (
@@ -101,7 +95,7 @@ Every event published to the broker is wrapped in a standard envelope. The envel
 | `source` | string | Publishing bounded context name. |
 | `timestamp` | ISO 8601 | When the event occurred (domain time, not publish time). |
 | `correlationId` | string | Ties the event to the originating request or workflow. Optional but recommended. |
-| `payload` | object | The domain event data. Schema is defined by `ddd-strategic-patterns`. |
+| `payload` | object | The domain event data. Schema follows event naming and versioning conventions. |
 
 Rules:
 - The envelope format is the same regardless of broker. Only the transport encoding (JSON, Protobuf, Avro) varies.
@@ -198,15 +192,21 @@ This skill does not prescribe a broker. The messaging bridge does. Common option
 | **NATS** | Ultra-lightweight, cloud-native | Microservices mesh, Kubernetes-native environments |
 | **Cloud-managed** (SQS/SNS, Azure Service Bus, Google Pub/Sub) | Zero operational burden | Cloud-native deployments, team wants managed infrastructure |
 
-For most systems starting out: use the **database-backed outbox with polling** (no separate broker). Upgrade to a dedicated broker when throughput or fan-out requirements exceed what polling can deliver.
+### Single-Context vs Cross-Context
 
----
+The database-backed outbox without a broker works only when the publisher and consumer share the same database — i.e., for **in-process or single-context** event dispatching (e.g., dispatching domain events to handlers within the same bounded context).
 
-## Companion Skills
+For **cross-context integration** (e.g., Identity publishes `UserRegistered`, Forum consumes it), a broker is required. Without one, the downstream context has no way to discover events:
 
-| When you need | Skill |
-|---|---|
-| Decide what events exist and which contexts publish/subscribe | `ddd-strategic-patterns` |
-| Event payload schema format and versioning | `ddd-strategic-patterns` (see `references/EVENT-SCHEMAS.md`) |
-| Wire this pattern to a .NET application | The messaging bridge (e.g. `dotnet-messaging`) |
-| Wire the outbox table to PostgreSQL | The database skill (e.g. `db-postgres`) |
+| Option | Viable? | Why |
+|---|---|---|
+| Downstream polls upstream's outbox table directly | ❌ No | Violates context isolation — downstream reads upstream's database |
+| Upstream exposes a polling HTTP endpoint over its outbox | ⚠️ Fragile | Requires upstream to build and maintain a feed API; still coupling |
+| Add a message broker (RabbitMQ, Kafka, etc.) | ✅ Yes | Clean separation — upstream publishes to broker, downstream subscribes independently |
+
+Rules:
+- For **single-context** internal event dispatching (domain events to side-effect handlers within the same app): database-backed outbox with polling is sufficient. No broker needed.
+- For **cross-context** integration (events consumed by a different bounded context / application): add a message broker from day one. The operational cost of RabbitMQ or a managed broker is far lower than the architectural cost of cross-database polling or feed APIs.
+- Do not start with "no broker" for cross-context events planning to add one later. The consumer patterns are fundamentally different (polling an API vs subscribing to a queue), and the migration is disruptive.
+
+

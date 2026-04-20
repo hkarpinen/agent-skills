@@ -18,7 +18,7 @@ description: Bridge between testing strategy and .NET implementation — xUnit, 
 
 ## Project Setup
 
-One test project covers every production project. Organize by test type via folders/namespaces, not by splitting into multiple test projects. See `testing` for the strategy rationale.
+One test project covers every production project. Organize by test type via folders/namespaces, not by splitting into multiple test projects.
 
 ```bash
 # Create the single test project under tests/
@@ -31,10 +31,10 @@ dotnet add tests/Tests package coverlet.collector
 dotnet add tests/Tests package Microsoft.AspNetCore.Mvc.Testing
 
 # Reference every production project.
-# The architecture bridge specifies which projects exist and their paths.
+# The architecture specifies which projects exist and their paths.
 ```
 
-The DB bridge skill specifies which Testcontainers package to add.
+Add the Testcontainers package appropriate for your database provider.
 
 ---
 

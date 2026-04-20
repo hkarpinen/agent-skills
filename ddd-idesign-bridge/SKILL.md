@@ -1,6 +1,6 @@
 ---
 name: ddd-idesign-bridge
-description: Bridge between Domain-Driven Design tactical patterns and Juval Löwy's IDesign Method. Use when implementing the Domain Layer of an IDesign architecture using DDD patterns (Entities, Aggregates, Value Objects, Domain Events), or when applying IDesign's volatility-based decomposition to a DDD-modeled domain. Shows how DDD patterns map to IDesign layers. Does NOT re-teach DDD patterns or IDesign conventions — those belong in `ddd-tactical-patterns` and `righting-software` respectively.
+description: Bridge between Domain-Driven Design tactical patterns and Juval Löwy's IDesign Method. Use when implementing the Domain Layer of an IDesign architecture using DDD patterns (Entities, Aggregates, Value Objects, Domain Events), or when applying IDesign's volatility-based decomposition to a DDD-modeled domain. Shows how DDD patterns map to IDesign layers. Does NOT re-teach DDD patterns or IDesign conventions.
 ---
 
 ## Scope
@@ -11,11 +11,6 @@ This skill owns the **mapping between DDD and IDesign**. It specifies:
 - Where each DDD pattern physically lives in the IDesign layer model
 - How IDesign's volatility analysis applies to DDD aggregate sizing
 - How DDD domain events flow through IDesign layers
-
-It does **not** re-teach:
-- DDD patterns themselves (see `ddd-tactical-patterns`)
-- IDesign layer rules or volatility analysis (see `righting-software`)
-- Repository implementations or ORM wiring (see the platform-specific architecture bridge + DB bridge)
 
 ---
 
@@ -34,7 +29,7 @@ when discussing modelling patterns.
 | External-system adapter | **Gateway** (`PaymentGateway`) | Anti-Corruption Layer / Gateway |
 | Entry-point project | **Client** | (no canonical DDD term) |
 
-When `righting-software` says "Engine" and `ddd-tactical-patterns` says "Domain
+When IDesign says "Engine" and DDD says "Domain
 Service", they are describing the same component. Class names end in `Engine`;
 conversational and documentation language may use either term.
 
@@ -115,12 +110,4 @@ ConfirmOrderAsync(orderId)
     order.ClearEvents()
 ```
 
----
 
-## Companion Skills
-
-| When you need | Skill |
-|---|---|
-| DDD patterns (Entities, Aggregates, Value Objects, Events) | `ddd-tactical-patterns` |
-| IDesign volatility analysis and layer model | `righting-software` |
-| Map IDesign layers to a specific platform | The platform-specific architecture bridge (e.g. `dotnet-idesign`) |

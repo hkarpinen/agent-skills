@@ -1,6 +1,6 @@
 ---
 name: nextjs-docker
-description: Bridge between a Next.js App Router application and Docker — multi-stage Dockerfile with standalone output, layer caching for node_modules, environment variable conventions, and Docker Compose wiring for a Next.js frontend alongside backend services. Use when containerizing a Next.js application. Compose with `nextjs-app` for framework conventions and `docker` for general container patterns.
+description: Bridge between a Next.js App Router application and Docker — multi-stage Dockerfile with standalone output, layer caching for node_modules, environment variable conventions, and Docker Compose wiring for a Next.js frontend alongside backend services. Use when containerizing a Next.js application.
 ---
 
 ## Base Images
@@ -191,12 +191,4 @@ frontend:
 
 Alpine images include `wget` but not `curl`. Use `wget -qO-` for healthchecks.
 
----
 
-## Companion Skills
-
-| When you need | Skill |
-|---|---|
-| Next.js framework conventions (App Router, Server Components, auth) | `nextjs-app` |
-| General Docker and Compose conventions | `docker` |
-| Backend API containerization | The backend Docker bridge (e.g. `dotnet-webapi-docker`) |

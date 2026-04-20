@@ -2,11 +2,7 @@
 
 This file covers the **xUnit-side** patterns for Testcontainers-based integration
 tests: container lifecycle, fixture sharing, collection definitions, and validator
-tests. Database-provider specifics (Npgsql connection strings, snake_case
-configuration, migration commands, schema seeding) belong in the DB bridge skill:
-
-- PostgreSQL + EF Core: see `dotnet-efcore-postgres/references/TESTCONTAINERS.md`
-- SQL Server + EF Core: see the corresponding bridge (when available)
+tests.
 
 ---
 
@@ -19,8 +15,7 @@ xUnit's `IAsyncLifetime`. Never start a container per test — that turns a
 ```csharp
 public class DatabaseFixture : IAsyncLifetime
 {
-    // Container + DbContext fields owned by the bridge skill — see
-    // dotnet-efcore-postgres/references/TESTCONTAINERS.md for the Postgres version.
+    // Container + DbContext fields — configure for your database provider.
 
     public async Task InitializeAsync()
     {
@@ -141,7 +136,7 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         builder.ConfigureServices(services =>
         {
             // Replace the DbContext registration with one pointed at the test container.
-            // Exact replacement syntax is provider-specific — see the bridge skill.
+            // Exact replacement syntax is provider-specific.
         });
     }
 }

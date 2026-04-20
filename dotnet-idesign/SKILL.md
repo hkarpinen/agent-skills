@@ -1,6 +1,6 @@
 ---
 name: dotnet-idesign
-description: Bridge between the IDesign Method and .NET — how IDesign's Client/Application/Domain/Infrastructure layer model maps to a .NET solution. Use when laying out a .NET solution under IDesign, organizing csproj dependencies to enforce call direction, choosing DI lifetimes per layer role, or writing Managers, Engines, and Resource Access components in C#. Swap for a different architecture bridge (e.g. a future `dotnet-clean-architecture`) without touching `dotnet-webapi`.
+description: Bridge between the IDesign Method and .NET — how IDesign's Client/Application/Domain/Infrastructure layer model maps to a .NET solution. Use when laying out a .NET solution under IDesign, organizing csproj dependencies to enforce call direction, choosing DI lifetimes per layer role, or writing Managers, Engines, and Resource Access components in C#.
 ---
 
 ## Scope
@@ -13,10 +13,6 @@ This skill owns the **.NET realization of IDesign**. It specifies:
 - DI lifetimes per layer role
 - Manager / Engine / Resource Access conventions in C#
 - Migration CLI invocations that target IDesign projects
-
-It does **not** cover ASP.NET Core framework primitives (controllers, middleware,
-packages, Identity, logging, HTTP resilience). Those are in `dotnet-webapi`
-regardless of architecture.
 
 ---
 
@@ -98,8 +94,8 @@ builder.Services
     .AddClient();   // controllers, validators, Swagger — ASP.NET Core plumbing
 ```
 
-The DB bridge skill (e.g. `dotnet-efcore-postgres`) supplies the data-access provider
-registration inside `AddInfrastructure`.
+The data-access provider registration (e.g. EF Core + Npgsql) belongs inside
+`AddInfrastructure`.
 
 Rules:
 - Order matters: register Utilities first (no dependencies), Infrastructure last
@@ -206,7 +202,7 @@ Rules:
 - Engines do not call other Engines through DI — if composition is needed, the
   caller is a Manager.
 - Entity / value-object patterns (invariants, domain events) are modelling
-  concerns — see `ddd-tactical-patterns` and `ddd-idesign-bridge`.
+  concerns.
 
 ---
 
@@ -225,8 +221,8 @@ public interface IOrderRepository
 }
 
 // Infrastructure/OrderRepository.cs  (internal sealed)
-// The DB bridge skill owns the data-access context type and wiring.
-// This skill only specifies WHERE implementations live.
+// The data-access context type and wiring are Infrastructure concerns.
+// This skill specifies WHERE implementations live.
 internal sealed class OrderRepository : IOrderRepository
 {
     // Constructor receives the data-access context registered by the DB bridge
@@ -240,7 +236,7 @@ internal sealed class OrderRepository : IOrderRepository
 ```
 
 The data-access context, entity configurations, and provider registration are
-owned by the DB bridge skill. This skill only specifies *where* Repository
+Infrastructure concerns. This skill specifies *where* Repository
 implementations live.
 
 ---
@@ -273,10 +269,9 @@ options.MigrationsAssembly("Infrastructure")
 
 ## Test Project Organization
 
-A single `Tests` project references every production project. The `testing`
-skill owns the general strategy (single project, folder-per-test-type);
-`dotnet-testing` owns xUnit setup and packages. This section specifies only
-the IDesign-specific wiring.
+A single `Tests` project references every production project. General test
+strategy (single project, folder-per-test-type) and xUnit setup are separate
+concerns. This section specifies only the IDesign-specific wiring.
 
 ```bash
 # Reference every IDesign layer
@@ -310,17 +305,34 @@ dotnet test --filter "FullyQualifiedName~.Integration."
 
 ---
 
-## What This Skill Does NOT Cover
+## ASP.NET Core Identity + DDD Reconciliation
 
-| Concern | Skill that owns it |
-|---|---|
-| ASP.NET Core controllers, middleware, packages | `dotnet-webapi` |
-| Data-access provider, context, entity config | The DB bridge (e.g. `dotnet-efcore-postgres`) |
-| Schema design, indexes, types | The database skill (e.g. `db-postgres`) |
-| Entity / aggregate / value-object patterns | `ddd-tactical-patterns` |
-| Volatility analysis, layer rules (language-agnostic) | `righting-software` |
-| Test framework tooling | `dotnet-testing` |
-| Dockerfile and Compose for this layout | `dotnet-webapi-docker` |
+When using ASP.NET Core Identity alongside DDD patterns (e.g., in an Identity bounded context modeled with aggregates), tension arises: Identity owns the user table schema (`AspNetUsers`, `AspNetRoles`), while DDD expects the domain model to own the schema.
 
-Swap this skill for a different architecture bridge (e.g. a future
-`dotnet-clean-architecture`) without touching any of the above.
+**Recommended approach — Extend `IdentityUser`:**
+
+```csharp
+// Domain layer — AppUser extends IdentityUser to add domain fields
+public class AppUser : IdentityUser
+{
+    public string DisplayName { get; private set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; private set; }
+    public DateTimeOffset? DeletedAt { get; private set; }
+
+    // Domain behavior lives here
+    public void UpdateProfile(string displayName)
+    {
+        DisplayName = displayName;
+    }
+}
+```
+
+Rules:
+- `AppUser` lives in the Domain layer. It extends `IdentityUser` to add domain-specific properties and behavior.
+- ASP.NET Core Identity's `UserManager<AppUser>` handles password hashing, lockout, email confirmation, and token generation. Do not reimplement these — they are infrastructure concerns that Identity handles correctly.
+- Domain events can still be raised from `AppUser` methods. The Manager collects and dispatches them after `UserManager` persists.
+- The `DbContext` inherits from `IdentityDbContext<AppUser>` instead of plain `DbContext`. Entity configurations can coexist with Identity's tables.
+- Do **not** create a parallel `User` aggregate that duplicates Identity's data. The `AppUser` extending `IdentityUser` **is** the aggregate root for the Identity context.
+- Identity + JWT registration is an ASP.NET Core concern. This section owns where `AppUser` lives in the IDesign layer model and how it reconciles with DDD aggregate patterns.
+
+

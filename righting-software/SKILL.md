@@ -104,6 +104,27 @@ Every service exposes only a contract (interface). Callers depend on contracts, 
 
 ---
 
+## Read-Model Query Path
+
+Not every query needs to traverse the full aggregate → Engine → Manager stack.
+For read-optimized screens (dashboards, lists, search results):
+
+1. **Manager calls Infrastructure directly** — the Manager may call a
+   read-oriented Repository or Gateway that returns a flat projection, skipping
+   the Domain layer entirely. This is valid because no business rules execute.
+2. **Domain layer is bypassed, not violated** — the call-direction rule still
+   holds (Application → Infrastructure). The Domain layer is simply not needed
+   when no invariants are enforced.
+3. **Return DTOs, not aggregates** — the read-side Repository returns
+   purpose-built read models (projections, views) rather than full domain
+   objects.
+
+This keeps complex query logic out of Engines (which should remain stateless
+business-rule containers) and avoids loading full aggregates just to display a
+list.
+
+---
+
 ## Instant Design Checklist
 
 - [ ] Each service encapsulates exactly one axis of volatility

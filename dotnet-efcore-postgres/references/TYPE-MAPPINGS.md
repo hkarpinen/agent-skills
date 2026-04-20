@@ -71,7 +71,7 @@ public class AppDbContext : DbContext
 }
 ```
 
-If your project uses ASP.NET Core Identity, `dotnet-webapi` specifies how to
+If your project uses ASP.NET Core Identity, the ASP.NET Core framework specifies how to
 inherit from `IdentityDbContext<AppUser>` and map Identity tables to a dedicated
-schema. That is a `dotnet-webapi` concern, not a DB-bridge concern.
+schema. That is an ASP.NET Core concern, not a DB-bridge concern.
 ```

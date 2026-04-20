@@ -1,6 +1,6 @@
 ---
 name: dotnet-messaging
-description: Bridge between messaging patterns and .NET — outbox implementation with EF Core, hosted service for outbox publishing, MassTransit consumer setup, and idempotent consumer wiring. Use when implementing the outbox pattern in a .NET application, setting up event consumers, or configuring MassTransit with RabbitMQ or the in-memory transport. Compose with `messaging` for the transport-agnostic patterns and `ddd-strategic-patterns` for event design.
+description: Bridge between messaging patterns and .NET — outbox implementation with EF Core, hosted service for outbox publishing, MassTransit consumer setup, and idempotent consumer wiring. Use when implementing the outbox pattern in a .NET application, setting up event consumers, or configuring MassTransit with RabbitMQ or the in-memory transport.
 ---
 
 ## Scope
@@ -12,11 +12,6 @@ This skill owns the **.NET realization of messaging patterns**. It specifies:
 - MassTransit consumer registration and configuration
 - Idempotent consumer base class
 - Integration test patterns for messaging
-
-It does **not** cover:
-- Transport-agnostic patterns (outbox theory, envelopes, idempotency rationale) — see `messaging`
-- Which events to publish or subscribe to — see `ddd-strategic-patterns`
-- Broker-specific infrastructure (Docker Compose for RabbitMQ) — see `docker`
 
 ---
 
@@ -99,17 +94,14 @@ A background `IHostedService` polls the outbox and publishes via whatever transp
 internal sealed class OutboxPublisher : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IPublishEndpoint _publishEndpoint;  // MassTransit or custom
     private readonly ILogger<OutboxPublisher> _logger;
     private readonly TimeSpan _pollingInterval = TimeSpan.FromSeconds(5);
 
     public OutboxPublisher(
         IServiceScopeFactory scopeFactory,
-        IPublishEndpoint publishEndpoint,
         ILogger<OutboxPublisher> logger)
     {
         _scopeFactory = scopeFactory;
-        _publishEndpoint = publishEndpoint;
         _logger = logger;
     }
 
@@ -126,6 +118,7 @@ internal sealed class OutboxPublisher : BackgroundService
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var publishEndpoint = scope.ServiceProvider.GetRequiredService<IPublishEndpoint>();
 
         var messages = await db.Set<OutboxMessage>()
             .Where(m => !m.Published)
@@ -137,7 +130,7 @@ internal sealed class OutboxPublisher : BackgroundService
         {
             try
             {
-                await _publishEndpoint.Publish<EventEnvelope>(
+                await publishEndpoint.Publish<EventEnvelope>(
                     new { message.Id, message.EventType, message.Payload, message.CreatedAt },
                     ct);
 
@@ -159,7 +152,7 @@ internal sealed class OutboxPublisher : BackgroundService
 
 Rules:
 - Register as `services.AddHostedService<OutboxPublisher>()` in the host project.
-- Use `IServiceScopeFactory` — `BackgroundService` is a singleton; `DbContext` is scoped.
+- Use `IServiceScopeFactory` — `BackgroundService` is a singleton; `DbContext` and `IPublishEndpoint` are scoped. Resolve both from the scope, never inject them into the constructor.
 - Break on first failure to preserve ordering within the publisher batch.
 - Tune `_pollingInterval` and batch size (`Take(50)`) based on throughput needs.
 
@@ -237,7 +230,7 @@ public class UserRegisteredConsumer : IConsumer<UserRegisteredEvent>
 }
 ```
 
-For non-idempotent operations, use the deduplication table approach from `messaging`:
+For non-idempotent operations, use the deduplication table approach:
 
 ```csharp
 public async Task Consume(ConsumeContext<SomeEvent> context)
@@ -265,7 +258,7 @@ public async Task Consume(ConsumeContext<SomeEvent> context)
 | `MassTransit.EntityFrameworkCore` | EF Core outbox integration (alternative to hand-rolled outbox) |
 | `MassTransit.Abstractions` | Shared message contracts |
 
-MassTransit ships its own outbox implementation (`cfg.UseEntityFrameworkOutbox()`). Use it instead of hand-rolling when MassTransit is your transport. The hand-rolled outbox from the `messaging` skill is for systems that do not use MassTransit or want broker independence.
+MassTransit ships its own outbox implementation (`cfg.UseEntityFrameworkOutbox()`). Use it instead of hand-rolling when MassTransit is your transport. The hand-rolled outbox is for systems that do not use MassTransit or want broker independence.
 
 ---
 
@@ -295,13 +288,4 @@ await harness.Bus.Publish(new UserRegisteredEvent
 (await harness.Consumed.Any<UserRegisteredEvent>()).Should().BeTrue();
 ```
 
----
 
-## Companion Skills
-
-| When you need | Skill |
-|---|---|
-| Transport-agnostic messaging patterns (outbox, envelopes, idempotency) | `messaging` |
-| Decide what events exist and which contexts publish/subscribe | `ddd-strategic-patterns` |
-| Event payload schema format and versioning | `ddd-strategic-patterns` (see `references/EVENT-SCHEMAS.md`) |
-| Wire the outbox table to PostgreSQL | `dotnet-efcore-postgres` + `db-postgres` |
